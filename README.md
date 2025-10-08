@@ -1,16 +1,3 @@
-# Welcome to your Lovable project
-
-## Project info
-
-**URL**: https://lovable.dev/projects/7800d46f-ee47-49e3-8122-b96bdf0800f4
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/7800d46f-ee47-49e3-8122-b96bdf0800f4) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
@@ -60,9 +47,18 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
+### Northflank Deployment
+1. Create a Northflank account and project.
+2. Connect your GitHub repository.
+3. Use the provided `Dockerfile` and `docker-compose.yml` for containerized deployment.
+4. Deploy the service using the Docker configuration.
 
-Simply open [Lovable](https://lovable.dev/projects/7800d46f-ee47-49e3-8122-b96bdf0800f4) and click on Share -> Publish.
+### Azure Deployment
+1. Create an Azure Static Web App resource.
+2. Connect your GitHub repository.
+3. Use the `.github/workflows/azure-static-web-apps.yml` workflow for CI/CD.
+4. Set the `AZURE_STATIC_WEB_APPS_API_TOKEN` secret in your GitHub repository settings.
+5. Push changes to trigger automatic deployment.
 
 ## Can I connect a custom domain to my Lovable project?
 

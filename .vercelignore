@@ -1,0 +1,8 @@
+backend/
+*.db
+*.sqlite
+*.md
+docker-compose.yml
+Dockerfile
+nginx.conf
+.dockerignore

@@ -43,7 +43,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
     items: []
   });
 
-  const availableAssets = assets.filter(asset => asset.quantity > 0 && !asset.siteId);
+  const availableAssets = assets.filter(asset => asset.quantity > 0);
 
   const handleAddItem = () => {
     setFormData(prev => ({

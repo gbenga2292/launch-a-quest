@@ -258,7 +258,7 @@ export const useBackupRestore = (defaultSettings: CompanySettings) => {
             role: emp.role,
             phone: emp.phone,
             email: emp.email,
-            status: emp.status === 'active' ? '1' : '0'
+            status: emp.status
           });
         }
       }
@@ -292,7 +292,7 @@ export const useBackupRestore = (defaultSettings: CompanySettings) => {
             site_id: waybill.siteId,
             driver_name: waybill.driverName,
             vehicle: waybill.vehicle,
-            issue_date: waybill.issueDate.toISOString(),
+            issue_date: waybill.issueDate?.toISOString(),
             expected_return_date: waybill.expectedReturnDate?.toISOString(),
             purpose: waybill.purpose,
             service: waybill.service,
@@ -311,7 +311,7 @@ export const useBackupRestore = (defaultSettings: CompanySettings) => {
             asset_name: checkout.assetName,
             quantity: checkout.quantity,
             employee: checkout.employee,
-            checkout_date: checkout.checkoutDate.toISOString(),
+            checkout_date: checkout.checkoutDate?.toISOString(),
             expected_return_days: checkout.expectedReturnDays,
             status: checkout.status
           });

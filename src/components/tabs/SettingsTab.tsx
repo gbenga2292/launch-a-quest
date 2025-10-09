@@ -76,15 +76,7 @@ export const SettingsTab = ({
       </TabsList>
 
       <TabsContent value="company" className="mt-6">
-        <CompanySettings
-          settings={companySettings}
-          onSave={setCompanySettings}
-          employees={employees}
-          onEmployeesChange={setEmployees}
-          vehicles={vehicles}
-          onVehiclesChange={setVehicles}
-          onResetAllData={handleResetAllData}
-        />
+        <CompanySettings />
       </TabsContent>
 
       <TabsContent value="backup" className="mt-6">

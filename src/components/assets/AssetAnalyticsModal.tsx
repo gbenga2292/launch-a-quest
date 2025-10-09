@@ -174,26 +174,28 @@ export const AssetAnalyticsModal = ({
             </CardContent>
           </Card>
 
-          {/* Failure Rate */}
+          {/* Failure Rate & Damaged/Missing Tracking */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                Failure Rate
+                Damaged & Missing
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <div className="font-medium">{formatNumber(analytics.failureRate.damageRate)}%</div>
-                  <div className="text-muted-foreground">Damage</div>
+                  <div className="font-medium text-orange-600">{analytics.failureRate.damagedCount}</div>
+                  <div className="text-muted-foreground">Damaged Items</div>
+                  <div className="text-[10px] text-muted-foreground">{formatNumber(analytics.failureRate.damageRate)}% rate</div>
                 </div>
                 <div>
-                  <div className="font-medium">{formatNumber(analytics.failureRate.missingRate)}%</div>
-                  <div className="text-muted-foreground">Missing</div>
+                  <div className="font-medium text-red-600">{analytics.failureRate.missingItemsCount}</div>
+                  <div className="text-muted-foreground">Missing Items</div>
+                  <div className="text-[10px] text-muted-foreground">{formatNumber(analytics.failureRate.missingRate)}% rate</div>
                 </div>
               </div>
-              <div className="text-xs">
+              <div className="text-xs pt-2 border-t">
                 Return Rate: {formatNumber(analytics.failureRate.returnRate)}%
               </div>
             </CardContent>

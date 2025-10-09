@@ -77,8 +77,15 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
             return {
               ...item,
               assetId: value,
-              assetName: asset?.name || '',
-              quantity: Math.min(item.quantity, asset?.quantity || 0)
+              assetName: asset?.name ?? 'Unknown Asset',
+              quantity: Math.min(item.quantity, asset?.quantity ?? 0)
+            };
+          }
+          // If assetId changes elsewhere, also update assetName
+          if (field === 'assetName') {
+            return {
+              ...item,
+              assetName: value ?? 'Unknown Asset'
             };
           }
           return { ...item, [field]: value };
@@ -104,6 +111,11 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
 
     const waybillData: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'> = {
       ...formData,
+      siteId: formData.siteId ?? '',
+      items: formData.items.map(item => ({
+        ...item,
+        assetName: item.assetName ?? 'Unknown Asset'
+      })),
       issueDate: new Date(),
       expectedReturnDate: formData.expectedReturnDate ? new Date(formData.expectedReturnDate) : undefined,
       status: 'outstanding',

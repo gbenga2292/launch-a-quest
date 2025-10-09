@@ -9,7 +9,7 @@ import { Item as Asset, Site } from "@/services/api";
 import { Package, Save, X } from "lucide-react";
 
 interface AddAssetFormProps {
-  onAddAsset?: (asset: Omit<Asset, 'id' | 'created_at' | 'updated_at' | 'reserved'>) => void;
+  onAddAsset?: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'created_at' | 'updated_at' | 'reserved'>) => void;
   asset?: Asset;
   onSave?: (asset: Asset) => void;
   onCancel?: () => void;
@@ -23,14 +23,14 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
   const [formData, setFormData] = useState({
     name: asset?.name || '',
     description: asset?.description || '',
-    total_stock: asset?.total_stock || 0,
-    unit: asset?.unit || '',
-    category: asset?.category || 'Dewatering' as 'Dewatering' | 'Waterproofing',
-    type: asset?.type || 'equipment' as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
+    total_stock: asset?.total_stock || asset?.quantity || 0,
+    unit: asset?.unit || asset?.unitOfMeasurement || '',
+    category: (asset?.category || 'Dewatering') as 'Dewatering' | 'Waterproofing',
+    type: (asset?.type || 'equipment') as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
     location: asset?.location || '',
-    siteId: asset?.site_id || '',
-    lowStockLevel: asset?.low_stock_level || 0,
-    criticalStockLevel: asset?.critical_stock_level || 0
+    siteId: asset?.siteId || asset?.site_id || '',
+    lowStockLevel: asset?.lowStockLevel || asset?.low_stock_level || 0,
+    criticalStockLevel: asset?.criticalStockLevel || asset?.critical_stock_level || 0
   });
 
   const [customLocation, setCustomLocation] = useState(asset?.location && !fixedLocations.includes(asset.location) ? asset.location : '');

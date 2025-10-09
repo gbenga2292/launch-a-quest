@@ -5,6 +5,8 @@ export interface ItemDB {
   id: string;
   name: string;
   quantity: number | null;
+  total_stock: number | null;
+  reserved: number | null;
   unit?: string | null;
   category?: string | null;
   location?: string | null;
@@ -191,35 +193,46 @@ const dbItemToAsset = (item: ItemDB): Asset => ({
   id: item.id,
   name: item.name,
   description: item.description || undefined,
-  quantity: item.quantity || 0,
+  quantity: item.quantity || item.total_stock || 0,
+  total_stock: item.total_stock || item.quantity || 0,
+  reserved: item.reserved || 0,
+  unit: item.unit || 'pcs',
   unitOfMeasurement: item.unit || 'pcs',
   category: (item.category as any) || 'Dewatering',
   type: (item.type as any) || 'equipment',
   location: item.location,
   siteId: item.site_id,
+  site_id: item.site_id,
   checkoutType: item.checkout_type as any,
+  checkout_type: item.checkout_type,
   status: (item.status as any) || 'active',
   condition: (item.condition as any) || 'good',
   lowStockLevel: item.low_stock_level,
+  low_stock_level: item.low_stock_level,
   criticalStockLevel: item.critical_stock_level,
+  critical_stock_level: item.critical_stock_level,
   createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+  created_at: item.created_at || new Date().toISOString(),
   updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+  updated_at: item.updated_at || new Date().toISOString(),
 });
 
 const assetToDbItem = (asset: Partial<Asset>): Partial<ItemDB> => ({
   name: asset.name,
   description: asset.description,
-  quantity: asset.quantity,
-  unit: asset.unitOfMeasurement,
+  quantity: asset.quantity || asset.total_stock,
+  total_stock: asset.total_stock || asset.quantity,
+  reserved: asset.reserved,
+  unit: asset.unit || asset.unitOfMeasurement,
   category: asset.category,
   type: asset.type,
   location: asset.location,
-  site_id: asset.siteId,
-  checkout_type: asset.checkoutType,
+  site_id: asset.siteId || asset.site_id,
+  checkout_type: asset.checkoutType || asset.checkout_type,
   status: asset.status,
   condition: asset.condition,
-  low_stock_level: asset.lowStockLevel,
-  critical_stock_level: asset.criticalStockLevel,
+  low_stock_level: asset.lowStockLevel || asset.low_stock_level,
+  critical_stock_level: asset.criticalStockLevel || asset.critical_stock_level,
 });
 
 const dbSiteToSite = (site: SiteDB): SiteFE => ({

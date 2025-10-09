@@ -174,8 +174,10 @@ export type Database = {
           low_stock_level: number | null
           name: string
           quantity: number | null
+          reserved: number | null
           site_id: string | null
           status: string | null
+          total_stock: number | null
           type: string | null
           unit: string | null
           updated_at: string | null
@@ -192,8 +194,10 @@ export type Database = {
           low_stock_level?: number | null
           name: string
           quantity?: number | null
+          reserved?: number | null
           site_id?: string | null
           status?: string | null
+          total_stock?: number | null
           type?: string | null
           unit?: string | null
           updated_at?: string | null
@@ -210,8 +214,10 @@ export type Database = {
           low_stock_level?: number | null
           name?: string
           quantity?: number | null
+          reserved?: number | null
           site_id?: string | null
           status?: string | null
+          total_stock?: number | null
           type?: string | null
           unit?: string | null
           updated_at?: string | null

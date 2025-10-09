@@ -3,23 +3,32 @@ export interface Asset {
   name: string;
   description?: string;
   quantity: number;
-  unitOfMeasurement: string;
+  total_stock: number;  // Total stock in database
+  reserved: number;  // Reserved/checked out stock
+  unit: string;  // Unit of measurement (database field)
+  unitOfMeasurement: string;  // Alias for unit
   category: 'Dewatering' | 'Waterproofing';
   type: 'consumable' | 'non-consumable' | 'tools' | 'equipment';
   location?: string;
   siteId?: string; // Link asset to a specific site
+  site_id?: string;  // Database field alias
   checkoutType?: 'waybill' | 'quick_checkout' | 'reconciled'; // Added to demarcate checkout type
+  checkout_type?: string;  // Database field alias
   service?: string; // Service classification for sorting
   status: 'active' | 'damaged' | 'missing' | 'maintenance';
   condition: 'excellent' | 'good' | 'fair' | 'poor';
   missingCount?: number;
   damagedCount?: number;
   lowStockLevel?: number;
+  low_stock_level?: number;  // Database field alias
   criticalStockLevel?: number;
+  critical_stock_level?: number;  // Database field alias
   purchaseDate?: Date;
   cost?: number;
   createdAt: Date;
+  created_at: string;  // Database field alias
   updatedAt: Date;
+  updated_at: string;  // Database field alias
 }
 
 export interface Waybill {

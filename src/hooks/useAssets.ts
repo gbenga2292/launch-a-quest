@@ -10,24 +10,33 @@ const transformApiAsset = (apiAsset: ApiAsset): Asset => ({
   id: apiAsset.id,
   name: apiAsset.name,
   description: apiAsset.description,
-  quantity: apiAsset.total_stock,
-  unitOfMeasurement: apiAsset.unit || '',
+  quantity: apiAsset.quantity || apiAsset.total_stock || 0,
+  total_stock: apiAsset.total_stock || apiAsset.quantity || 0,
+  reserved: apiAsset.reserved || 0,
+  unit: apiAsset.unit || apiAsset.unitOfMeasurement || 'pcs',
+  unitOfMeasurement: apiAsset.unitOfMeasurement || apiAsset.unit || 'pcs',
   category: apiAsset.category as 'Dewatering' | 'Waterproofing',
   type: apiAsset.type as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
   location: apiAsset.location,
-  siteId: apiAsset.site_id,
-  checkoutType: apiAsset.checkout_type as 'waybill' | 'quick_checkout' | 'reconciled',
+  siteId: apiAsset.siteId,
+  site_id: apiAsset.site_id,
+  checkoutType: apiAsset.checkoutType as 'waybill' | 'quick_checkout' | 'reconciled',
+  checkout_type: apiAsset.checkout_type,
   service: '', // Not available in API
   status: apiAsset.status as 'active' | 'damaged' | 'missing' | 'maintenance',
   condition: apiAsset.condition as 'excellent' | 'good' | 'fair' | 'poor',
   missingCount: 0, // Not available in API
   damagedCount: 0, // Not available in API
-  lowStockLevel: apiAsset.low_stock_level,
-  criticalStockLevel: apiAsset.critical_stock_level,
+  lowStockLevel: apiAsset.lowStockLevel,
+  low_stock_level: apiAsset.low_stock_level,
+  criticalStockLevel: apiAsset.criticalStockLevel,
+  critical_stock_level: apiAsset.critical_stock_level,
   purchaseDate: undefined, // Not available in API
   cost: 0, // Not available in API
-  createdAt: new Date(apiAsset.created_at),
-  updatedAt: new Date(apiAsset.updated_at),
+  createdAt: new Date(apiAsset.createdAt),
+  created_at: typeof apiAsset.created_at === 'string' ? apiAsset.created_at : apiAsset.createdAt.toISOString(),
+  updatedAt: new Date(apiAsset.updatedAt),
+  updated_at: typeof apiAsset.updated_at === 'string' ? apiAsset.updated_at : apiAsset.updatedAt.toISOString(),
 });
 
 export const useAssets = () => {
@@ -58,7 +67,7 @@ export const useAssets = () => {
     loadAssets();
   }, [toast]);
 
-  const handleAddAsset = async (assetData: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleAddAsset = async (assetData: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'created_at' | 'updated_at' | 'reserved'>) => {
     console.log('assetData', assetData);
     if (!isAuthenticated) {
       toast({
@@ -73,17 +82,18 @@ export const useAssets = () => {
       const apiAssetData = {
         name: assetData.name,
         description: assetData.description,
-        total_stock: assetData.quantity,
-        unit: assetData.unitOfMeasurement,
+        total_stock: assetData.total_stock || assetData.quantity || 0,
+        reserved: 0,  // New assets start with 0 reserved
+        unit: assetData.unit || assetData.unitOfMeasurement || 'pcs',
         category: assetData.category,
         type: assetData.type,
         location: assetData.location,
-        site_id: assetData.siteId,
-        checkout_type: assetData.checkoutType,
+        site_id: assetData.siteId || assetData.site_id,
+        checkout_type: assetData.checkoutType || assetData.checkout_type,
         status: assetData.status,
         condition: assetData.condition,
-        low_stock_level: assetData.lowStockLevel,
-        critical_stock_level: assetData.criticalStockLevel,
+        low_stock_level: assetData.lowStockLevel || assetData.low_stock_level,
+        critical_stock_level: assetData.criticalStockLevel || assetData.critical_stock_level,
       };
       const createdItem = await api.createItem(apiAssetData as any);
       const transformedAsset = transformApiAsset(createdItem);
@@ -117,17 +127,18 @@ export const useAssets = () => {
       const apiAssetData = {
         name: updatedAsset.name,
         description: updatedAsset.description,
-        total_stock: updatedAsset.quantity,
-        unit: updatedAsset.unitOfMeasurement,
+        total_stock: updatedAsset.total_stock || updatedAsset.quantity || 0,
+        reserved: updatedAsset.reserved || 0,
+        unit: updatedAsset.unit || updatedAsset.unitOfMeasurement || 'pcs',
         category: updatedAsset.category,
         type: updatedAsset.type,
         location: updatedAsset.location,
-        site_id: updatedAsset.siteId,
-        checkout_type: updatedAsset.checkoutType,
+        site_id: updatedAsset.siteId || updatedAsset.site_id,
+        checkout_type: updatedAsset.checkoutType || updatedAsset.checkout_type,
         status: updatedAsset.status,
         condition: updatedAsset.condition,
-        low_stock_level: updatedAsset.lowStockLevel,
-        critical_stock_level: updatedAsset.criticalStockLevel,
+        low_stock_level: updatedAsset.lowStockLevel || updatedAsset.low_stock_level,
+        critical_stock_level: updatedAsset.criticalStockLevel || updatedAsset.critical_stock_level,
       };
       const updatedItem = await api.updateItem(updatedAsset.id, apiAssetData as any);
       console.log('Updated item from server:', updatedItem);
@@ -163,17 +174,18 @@ export const useAssets = () => {
       const apiAssets = updatedAssets.map(asset => ({
         name: asset.name,
         description: asset.description,
-        total_stock: asset.quantity,
-        unit: asset.unitOfMeasurement,
+        total_stock: asset.total_stock || asset.quantity || 0,
+        reserved: asset.reserved || 0,
+        unit: asset.unit || asset.unitOfMeasurement || 'pcs',
         category: asset.category,
         type: asset.type,
         location: asset.location,
-        site_id: asset.siteId,
-        checkout_type: asset.checkoutType,
+        site_id: asset.siteId || asset.site_id,
+        checkout_type: asset.checkoutType || asset.checkout_type,
         status: asset.status,
         condition: asset.condition,
-        low_stock_level: asset.lowStockLevel,
-        critical_stock_level: asset.criticalStockLevel,
+        low_stock_level: asset.lowStockLevel || asset.low_stock_level,
+        critical_stock_level: asset.criticalStockLevel || asset.critical_stock_level,
       }));
       await Promise.all(updatedAssets.map((asset, index) => api.updateItem(asset.id, apiAssets[index] as any)));
       setAssets(prev =>
@@ -237,8 +249,9 @@ export const useAssets = () => {
         const assetData = {
           name: item.name,
           description: item.description || '',
-          total_stock: item.quantity,
-          unit: item.unitOfMeasurement,
+          total_stock: item.quantity || 0,
+          reserved: 0,
+          unit: item.unitOfMeasurement || 'pcs',
           category: item.category,
           type: item.type,
           location: item.location || '',

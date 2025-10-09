@@ -1,9 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export interface Item {
+// Database types (snake_case)
+export interface ItemDB {
   id: string;
   name: string;
   quantity: number | null;
+  total_stock: number | null;
+  reserved: number | null;
   unit?: string | null;
   category?: string | null;
   location?: string | null;
@@ -19,7 +22,20 @@ export interface Item {
   updated_at: string | null;
 }
 
-export interface Site {
+// Frontend types (from asset.ts)
+import type { Asset, Site as SiteFE, Employee as EmployeeFE, Waybill as WaybillFE, QuickCheckout as QuickCheckoutFE, ReturnBill, SiteTransaction as SiteTransactionFE, Activity as ActivityFE, ReturnItem } from '@/types/asset';
+
+// Re-export types for backward compatibility
+export type Item = Asset;
+export type Site = SiteFE;
+export type Employee = EmployeeFE;
+export type Waybill = WaybillFE;
+export type QuickCheckout = QuickCheckoutFE;
+export type SiteTransaction = SiteTransactionFE;
+export type Activity = ActivityFE;
+export type { ReturnItem, Asset };
+
+export interface SiteDB {
   id: string;
   name: string;
   location?: string;
@@ -32,7 +48,7 @@ export interface Site {
   updated_at: string;
 }
 
-export interface Employee {
+export interface EmployeeDB {
   id: string;
   name: string;
   role?: string;
@@ -83,7 +99,7 @@ export interface WaybillItem {
   unit?: string;
 }
 
-export interface Waybill {
+export interface WaybillDB {
   id: string;
   site_id?: string;
   driver_name?: string;
@@ -95,12 +111,12 @@ export interface Waybill {
   return_to_site_id?: string;
   status?: string;
   type?: string;
-  items: WaybillItem[];
+  items: any;
   created_at: string;
   updated_at: string;
 }
 
-export interface QuickCheckout {
+export interface QuickCheckoutDB {
   id: string;
   asset_id: string;
   asset_name: string;
@@ -145,7 +161,7 @@ export interface SiteInventory {
   created_at: string;
 }
 
-export interface SiteTransaction {
+export interface SiteTransactionDB {
   id: string;
   site_id?: string;
   asset_id?: string;
@@ -161,7 +177,7 @@ export interface SiteTransaction {
   created_by?: string;
 }
 
-export interface Activity {
+export interface ActivityDB {
   id: string;
   user_id?: string;
   user_name?: string;
@@ -172,45 +188,184 @@ export interface Activity {
   timestamp: string;
 }
 
+// Conversion functions
+const dbItemToAsset = (item: ItemDB): Asset => ({
+  id: item.id,
+  name: item.name,
+  description: item.description || undefined,
+  quantity: item.quantity || item.total_stock || 0,
+  total_stock: item.total_stock || item.quantity || 0,
+  reserved: item.reserved || 0,
+  unit: item.unit || 'pcs',
+  unitOfMeasurement: item.unit || 'pcs',
+  category: (item.category as any) || 'Dewatering',
+  type: (item.type as any) || 'equipment',
+  location: item.location,
+  siteId: item.site_id,
+  site_id: item.site_id,
+  checkoutType: item.checkout_type as any,
+  checkout_type: item.checkout_type,
+  status: (item.status as any) || 'active',
+  condition: (item.condition as any) || 'good',
+  lowStockLevel: item.low_stock_level,
+  low_stock_level: item.low_stock_level,
+  criticalStockLevel: item.critical_stock_level,
+  critical_stock_level: item.critical_stock_level,
+  createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+  created_at: item.created_at || new Date().toISOString(),
+  updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+  updated_at: item.updated_at || new Date().toISOString(),
+});
+
+const assetToDbItem = (asset: Partial<Asset>): Partial<ItemDB> => ({
+  name: asset.name,
+  description: asset.description,
+  quantity: asset.quantity || asset.total_stock,
+  total_stock: asset.total_stock || asset.quantity,
+  reserved: asset.reserved,
+  unit: asset.unit || asset.unitOfMeasurement,
+  category: asset.category,
+  type: asset.type,
+  location: asset.location,
+  site_id: asset.siteId || asset.site_id,
+  checkout_type: asset.checkoutType || asset.checkout_type,
+  status: asset.status,
+  condition: asset.condition,
+  low_stock_level: asset.lowStockLevel || asset.low_stock_level,
+  critical_stock_level: asset.criticalStockLevel || asset.critical_stock_level,
+});
+
+const dbSiteToSite = (site: SiteDB): SiteFE => ({
+  id: site.id,
+  name: site.name,
+  location: site.location || '',
+  description: site.description,
+  clientName: site.client_name,
+  contactPerson: site.contact_person,
+  phone: site.phone,
+  services: [],
+  status: (site.status as any) || 'active',
+  createdAt: site.created_at ? new Date(site.created_at) : new Date(),
+  updatedAt: site.updated_at ? new Date(site.updated_at) : new Date(),
+});
+
+const dbEmployeeToEmployee = (emp: EmployeeDB): EmployeeFE => ({
+  id: emp.id,
+  name: emp.name,
+  role: emp.role || '',
+  phone: emp.phone,
+  email: emp.email,
+  status: (emp.status as any) || 'active',
+  createdAt: emp.created_at ? new Date(emp.created_at) : new Date(),
+  updatedAt: emp.updated_at ? new Date(emp.updated_at) : new Date(),
+});
+
+const dbWaybillToWaybill = (wb: WaybillDB): WaybillFE => {
+  const items = typeof wb.items === 'string' ? JSON.parse(wb.items) : wb.items;
+  return {
+    id: wb.id,
+    items: items.map((item: any) => ({
+      assetId: item.id || item.assetId,
+      assetName: item.name || item.assetName,
+      quantity: item.quantity,
+      returnedQuantity: item.returnedQuantity || 0,
+      status: item.status || 'outstanding',
+    })),
+    siteId: wb.site_id || '',
+    driverName: wb.driver_name || '',
+    vehicle: wb.vehicle || '',
+    issueDate: wb.issue_date ? new Date(wb.issue_date) : new Date(),
+    expectedReturnDate: wb.expected_return_date ? new Date(wb.expected_return_date) : undefined,
+    purpose: wb.purpose || '',
+    service: wb.service || '',
+    returnToSiteId: wb.return_to_site_id,
+    status: (wb.status as any) || 'outstanding',
+    type: (wb.type as any) || 'waybill',
+    createdAt: wb.created_at ? new Date(wb.created_at) : new Date(),
+    updatedAt: wb.updated_at ? new Date(wb.updated_at) : new Date(),
+  };
+};
+
+const dbQuickCheckoutToQuickCheckout = (qc: QuickCheckoutDB): QuickCheckoutFE => ({
+  id: qc.id,
+  assetId: qc.asset_id,
+  assetName: qc.asset_name,
+  quantity: qc.quantity,
+  employee: qc.employee,
+  checkoutDate: qc.checkout_date ? new Date(qc.checkout_date) : new Date(),
+  expectedReturnDays: qc.expected_return_days || 0,
+  status: (qc.status as any) || 'outstanding',
+  siteId: qc.site_id,
+});
+
+const dbSiteTransactionToSiteTransaction = (st: SiteTransactionDB): SiteTransactionFE => ({
+  id: st.id,
+  siteId: st.site_id || '',
+  assetId: st.asset_id || '',
+  assetName: st.asset_name || '',
+  quantity: st.quantity || 0,
+  type: (st.type as any) || 'in',
+  transactionType: (st.transaction_type as any) || 'waybill',
+  referenceId: st.reference_id || '',
+  referenceType: (st.reference_type as any) || 'waybill',
+  condition: st.condition as any,
+  notes: st.notes,
+  createdAt: st.created_at ? new Date(st.created_at) : new Date(),
+  createdBy: st.created_by,
+});
+
+const dbActivityToActivity = (act: ActivityDB): ActivityFE => ({
+  id: act.id,
+  userId: act.user_id || '',
+  userName: act.user_name,
+  action: act.action as any,
+  entity: act.entity as any,
+  entityId: act.entity_id,
+  details: act.details,
+  timestamp: act.timestamp ? new Date(act.timestamp) : new Date(),
+});
+
 export const api = {
-  async getItems(): Promise<Item[]> {
+  async getItems(): Promise<Asset[]> {
     const { data, error } = await supabase
       .from('items')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch items');
-    return data || [];
+    return (data || []).map(dbItemToAsset);
   },
 
-  async createItem(item: Omit<Item, 'id' | 'created_at' | 'updated_at'>): Promise<Item> {
+  async createItem(item: Partial<Asset>): Promise<Asset> {
     const id = `item_${Date.now()}`;
+    const dbItem = assetToDbItem(item);
     const { data, error } = await supabase
       .from('items')
       .insert({
         id,
-        ...item,
-        quantity: item.quantity ?? 0,
-        low_stock_level: item.low_stock_level ?? 0,
-        critical_stock_level: item.critical_stock_level ?? 0,
+        ...dbItem,
+        quantity: dbItem.quantity ?? 0,
+        low_stock_level: dbItem.low_stock_level ?? 0,
+        critical_stock_level: dbItem.critical_stock_level ?? 0,
       })
       .select()
       .single();
 
     if (error) throw new Error('Failed to create item');
-    return data;
+    return dbItemToAsset(data);
   },
 
-  async updateItem(id: string, item: Partial<Omit<Item, 'id' | 'created_at' | 'updated_at'>>): Promise<Item> {
+  async updateItem(id: string, item: Partial<Asset>): Promise<Asset> {
+    const dbItem = assetToDbItem(item);
     const { data, error } = await supabase
       .from('items')
-      .update(item)
+      .update(dbItem)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw new Error('Failed to update item');
-    return data;
+    return dbItemToAsset(data);
   },
 
   async deleteItem(id: string): Promise<void> {
@@ -222,7 +377,7 @@ export const api = {
     if (error) throw new Error('Failed to delete item');
   },
 
-  async backupDatabase(): Promise<{ items: Item[], timestamp: string, version: string }> {
+  async backupDatabase(): Promise<{ items: Asset[], timestamp: string, version: string }> {
     const items = await this.getItems();
     return {
       items,
@@ -231,14 +386,15 @@ export const api = {
     };
   },
 
-  async restoreDatabase(items: Item[]): Promise<void> {
+  async restoreDatabase(items: Asset[]): Promise<void> {
     // Delete all existing items
     await supabase.from('items').delete().neq('id', '');
 
-    // Insert all items
+    // Convert and insert all items
+    const dbItems = items.map(item => assetToDbItem(item));
     const { error } = await supabase
       .from('items')
-      .insert(items);
+      .insert(dbItems);
 
     if (error) throw new Error('Failed to restore database');
   },
@@ -296,32 +452,49 @@ export const api = {
     if (updateError) throw new Error('Failed to reset company settings');
   },
 
-  async getSites(): Promise<Site[]> {
+  async getSites(): Promise<SiteFE[]> {
     const { data, error } = await supabase
       .from('sites')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch sites');
-    return data || [];
+    return (data || []).map(dbSiteToSite);
   },
 
-  async createSite(site: Omit<Site, 'id' | 'created_at' | 'updated_at'>): Promise<Site> {
+  async createSite(site: Partial<SiteFE>): Promise<SiteFE> {
     const id = `site_${Date.now()}`;
     const { data, error } = await supabase
       .from('sites')
-      .insert({ id, ...site })
+      .insert({ 
+        id, 
+        name: site.name,
+        location: site.location,
+        description: site.description,
+        client_name: site.clientName,
+        contact_person: site.contactPerson,
+        phone: site.phone,
+        status: site.status,
+      })
       .select()
       .single();
 
     if (error) throw new Error('Failed to create site');
-    return data;
+    return dbSiteToSite(data);
   },
 
-  async updateSite(id: string, site: Partial<Omit<Site, 'id' | 'created_at' | 'updated_at'>>): Promise<void> {
+  async updateSite(id: string, site: Partial<SiteFE>): Promise<void> {
     const { error } = await supabase
       .from('sites')
-      .update(site)
+      .update({
+        name: site.name,
+        location: site.location,
+        description: site.description,
+        client_name: site.clientName,
+        contact_person: site.contactPerson,
+        phone: site.phone,
+        status: site.status,
+      })
       .eq('id', id);
 
     if (error) throw new Error('Failed to update site');
@@ -336,32 +509,32 @@ export const api = {
     if (error) throw new Error('Failed to delete site');
   },
 
-  async getEmployees(): Promise<Employee[]> {
+  async getEmployees(): Promise<EmployeeFE[]> {
     const { data, error } = await supabase
       .from('employees')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch employees');
-    return data || [];
+    return (data || []).map(dbEmployeeToEmployee);
   },
 
-  async createEmployee(employee: Omit<Employee, 'id' | 'created_at' | 'updated_at'>): Promise<Employee> {
+  async createEmployee(employee: Partial<EmployeeFE>): Promise<EmployeeFE> {
     const id = `emp_${Date.now()}`;
     const { data, error } = await supabase
       .from('employees')
-      .insert({ id, ...employee })
+      .insert({ id, name: employee.name, role: employee.role, phone: employee.phone, email: employee.email, status: employee.status })
       .select()
       .single();
 
     if (error) throw new Error('Failed to create employee');
-    return data;
+    return dbEmployeeToEmployee(data);
   },
 
-  async updateEmployee(id: string, employee: Partial<Omit<Employee, 'id' | 'created_at' | 'updated_at'>>): Promise<void> {
+  async updateEmployee(id: string, employee: Partial<EmployeeFE>): Promise<void> {
     const { error } = await supabase
       .from('employees')
-      .update(employee)
+      .update({ name: employee.name, role: employee.role, phone: employee.phone, email: employee.email, status: employee.status })
       .eq('id', id);
 
     if (error) throw new Error('Failed to update employee');
@@ -489,68 +662,136 @@ export const api = {
     if (error) throw new Error('Failed to update backup settings');
   },
 
-  async getWaybills(): Promise<Waybill[]> {
+  async getWaybills(): Promise<WaybillFE[]> {
     const { data, error } = await supabase
       .from('waybills')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch waybills');
-    return (data || []).map(w => ({
-      ...w,
-      items: typeof w.items === 'string' ? JSON.parse(w.items) : w.items
-    }));
+    return (data || []).map(dbWaybillToWaybill);
   },
 
-  async createWaybill(waybill: Omit<Waybill, 'id' | 'created_at' | 'updated_at'>): Promise<Waybill> {
-    // Use type assertion for RPC call
-    const { data, error } = await (supabase.rpc as any)('create_waybill_and_reserve_stock', { waybill_data: waybill });
+  async createWaybill(waybill: Partial<WaybillFE>): Promise<WaybillFE> {
+    const id = `wb_${Date.now()}`;
+    
+    // Deduct inventory for items in the waybill
+    if (waybill.items && waybill.items.length > 0) {
+      for (const item of waybill.items) {
+        const { data: currentItem } = await supabase
+          .from('items')
+          .select('quantity')
+          .eq('id', item.assetId)
+          .single();
+        
+        if (currentItem) {
+          const newQuantity = (currentItem.quantity || 0) - item.quantity;
+          await supabase
+            .from('items')
+            .update({ quantity: newQuantity })
+            .eq('id', item.assetId);
+        }
+      }
+    }
+    
+    const { data, error } = await supabase
+      .from('waybills')
+      .insert({
+        id,
+        site_id: waybill.siteId,
+        driver_name: waybill.driverName,
+        vehicle: waybill.vehicle,
+        issue_date: waybill.issueDate?.toISOString(),
+        expected_return_date: waybill.expectedReturnDate?.toISOString(),
+        purpose: waybill.purpose,
+        service: waybill.service,
+        return_to_site_id: waybill.returnToSiteId,
+        status: waybill.status,
+        type: waybill.type,
+        items: JSON.stringify(waybill.items || []),
+      })
+      .select()
+      .single();
 
     if (error) throw new Error('Failed to create waybill: ' + error.message);
-
-    return data;
+    return dbWaybillToWaybill(data);
   },
 
-  async updateWaybill(id: string, waybill: Partial<Omit<Waybill, 'id' | 'created_at' | 'updated_at'>>): Promise<void> {
-    // Use type assertion for RPC call
-    const { error } = await (supabase.rpc as any)('update_waybill_and_adjust_stock', { waybill_id_to_update: id, waybill_data: waybill });
+  async updateWaybill(id: string, waybill: Partial<WaybillFE>): Promise<void> {
+    const { error } = await supabase
+      .from('waybills')
+      .update({
+        site_id: waybill.siteId,
+        driver_name: waybill.driverName,
+        vehicle: waybill.vehicle,
+        issue_date: waybill.issueDate?.toISOString(),
+        expected_return_date: waybill.expectedReturnDate?.toISOString(),
+        purpose: waybill.purpose,
+        service: waybill.service,
+        return_to_site_id: waybill.returnToSiteId,
+        status: waybill.status,
+        type: waybill.type,
+        items: waybill.items ? JSON.stringify(waybill.items) : undefined,
+      })
+      .eq('id', id);
 
     if (error) throw new Error('Failed to update waybill: ' + error.message);
   },
 
   async deleteWaybill(id: string): Promise<void> {
-    // Use type assertion for RPC call
-    const { error } = await (supabase.rpc as any)('delete_waybill_and_release_stock', { waybill_id_to_delete: id });
+    const { error } = await supabase
+      .from('waybills')
+      .delete()
+      .eq('id', id);
 
     if (error) throw new Error('Failed to delete waybill: ' + error.message);
   },
 
-  async getQuickCheckouts(): Promise<QuickCheckout[]> {
+  async getQuickCheckouts(): Promise<QuickCheckoutFE[]> {
     const { data, error } = await supabase
       .from('quick_checkouts')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch quick checkouts');
-    return data || [];
+    return (data || []).map(dbQuickCheckoutToQuickCheckout);
   },
 
-  async createQuickCheckout(checkout: Omit<QuickCheckout, 'id' | 'created_at'>): Promise<QuickCheckout> {
+  async createQuickCheckout(checkout: Partial<QuickCheckoutFE>): Promise<QuickCheckoutFE> {
     const id = `qc_${Date.now()}`;
     const { data, error } = await supabase
       .from('quick_checkouts')
-      .insert({ id, ...checkout })
+      .insert({ 
+        id, 
+        asset_id: checkout.assetId,
+        asset_name: checkout.assetName,
+        quantity: checkout.quantity,
+        employee: checkout.employee,
+        checkout_date: checkout.checkoutDate?.toISOString(),
+        expected_return_days: checkout.expectedReturnDays,
+        status: checkout.status,
+        site_id: checkout.siteId,
+      })
       .select()
       .single();
 
     if (error) throw new Error('Failed to create quick checkout');
-    return data;
+    return dbQuickCheckoutToQuickCheckout(data);
   },
 
-  async updateQuickCheckout(id: string, checkout: Partial<Omit<QuickCheckout, 'id' | 'created_at'>>): Promise<void> {
+  async updateQuickCheckout(id: string, checkout: Partial<QuickCheckoutFE>): Promise<void> {
     const { error } = await supabase
       .from('quick_checkouts')
-      .update(checkout)
+      .update({
+        asset_id: checkout.assetId,
+        asset_name: checkout.assetName,
+        quantity: checkout.quantity,
+        employee: checkout.employee,
+        checkout_date: checkout.checkoutDate?.toISOString(),
+        expected_return_days: checkout.expectedReturnDays,
+        status: checkout.status,
+        site_id: checkout.siteId,
+      })
       .eq('id', id);
 
     if (error) throw new Error('Failed to update quick checkout');
@@ -597,7 +838,7 @@ export const api = {
     };
   },
 
-  async getSiteTransactions(siteId?: string): Promise<SiteTransaction[]> {
+  async getSiteTransactions(siteId?: string): Promise<SiteTransactionFE[]> {
     let query = supabase
       .from('site_transactions')
       .select('*')
@@ -610,7 +851,7 @@ export const api = {
     const { data, error } = await query;
 
     if (error) throw new Error('Failed to fetch site transactions');
-    return data || [];
+    return (data || []).map(dbSiteTransactionToSiteTransaction);
   },
 
   async getSiteInventory(siteId?: string): Promise<SiteInventory[]> {
@@ -671,11 +912,24 @@ export const api = {
     }
   },
 
-  async createSiteTransaction(transaction: Omit<SiteTransaction, 'id' | 'created_at'>): Promise<SiteTransaction> {
+  async createSiteTransaction(transaction: Partial<SiteTransactionFE>): Promise<SiteTransactionFE> {
     const id = `st_${Date.now()}`;
     const { data, error } = await supabase
       .from('site_transactions')
-      .insert({ id, ...transaction })
+      .insert({ 
+        id, 
+        site_id: transaction.siteId,
+        asset_id: transaction.assetId,
+        asset_name: transaction.assetName,
+        quantity: transaction.quantity,
+        type: transaction.type,
+        transaction_type: transaction.transactionType,
+        reference_id: transaction.referenceId,
+        reference_type: transaction.referenceType,
+        condition: transaction.condition,
+        notes: transaction.notes,
+        created_by: transaction.createdBy,
+      })
       .select()
       .single();
 
@@ -683,24 +937,32 @@ export const api = {
       console.error('Failed to create site transaction:', error);
       throw new Error(`Failed to create site transaction: ${error.message}`);
     }
-    return data;
+    return dbSiteTransactionToSiteTransaction(data);
   },
 
-  async getActivities(): Promise<Activity[]> {
+  async getActivities(): Promise<ActivityFE[]> {
     const { data, error } = await supabase
       .from('activities')
       .select('*')
       .order('timestamp', { ascending: false });
 
     if (error) throw new Error('Failed to fetch activities');
-    return data || [];
+    return (data || []).map(dbActivityToActivity);
   },
 
-  async logActivity(activity: Omit<Activity, 'id' | 'timestamp'>): Promise<void> {
+  async logActivity(activity: Partial<ActivityFE>): Promise<void> {
     const id = `act_${Date.now()}`;
     const { error } = await supabase
       .from('activities')
-      .insert({ id, ...activity });
+      .insert({ 
+        id, 
+        user_id: activity.userId,
+        user_name: activity.userName,
+        action: activity.action,
+        entity: activity.entity,
+        entity_id: activity.entityId,
+        details: activity.details,
+      });
 
     if (error) {
       console.error('Failed to log activity:', error);
@@ -708,7 +970,7 @@ export const api = {
     }
   },
 
-  async createActivity(activity: Omit<Activity, 'id' | 'timestamp'>): Promise<void> {
+  async createActivity(activity: Partial<ActivityFE>): Promise<void> {
     return this.logActivity(activity);
   },
 

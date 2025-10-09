@@ -16,9 +16,9 @@ export type Database = {
     Tables: {
       activities: {
         Row: {
-          action: string | null
+          action: string
           details: string | null
-          entity: string | null
+          entity: string
           entity_id: string | null
           id: string
           timestamp: string | null
@@ -26,9 +26,9 @@ export type Database = {
           user_name: string | null
         }
         Insert: {
-          action?: string | null
+          action: string
           details?: string | null
-          entity?: string | null
+          entity: string
           entity_id?: string | null
           id: string
           timestamp?: string | null
@@ -36,9 +36,9 @@ export type Database = {
           user_name?: string | null
         }
         Update: {
-          action?: string | null
+          action?: string
           details?: string | null
-          entity?: string | null
+          entity?: string
           entity_id?: string | null
           id?: string
           timestamp?: string | null
@@ -61,7 +61,7 @@ export type Database = {
           auto_backup?: boolean | null
           created_at?: string | null
           frequency?: string | null
-          id: number
+          id?: number
           last_backup?: string | null
           retention_count?: number | null
           updated_at?: string | null
@@ -76,140 +76,6 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
-      }
-      blog_posts: {
-        Row: {
-          author_id: string
-          category_id: string | null
-          content: string
-          created_at: string
-          excerpt: string | null
-          featured_image: string | null
-          id: string
-          meta_description: string | null
-          meta_title: string | null
-          published_at: string | null
-          slug: string
-          status: string | null
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          author_id: string
-          category_id?: string | null
-          content: string
-          created_at?: string
-          excerpt?: string | null
-          featured_image?: string | null
-          id?: string
-          meta_description?: string | null
-          meta_title?: string | null
-          published_at?: string | null
-          slug: string
-          status?: string | null
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          author_id?: string
-          category_id?: string | null
-          content?: string
-          created_at?: string
-          excerpt?: string | null
-          featured_image?: string | null
-          id?: string
-          meta_description?: string | null
-          meta_title?: string | null
-          published_at?: string | null
-          slug?: string
-          status?: string | null
-          title?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "blog_posts_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "blog_posts_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      categories: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          name: string
-          slug: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name: string
-          slug: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name?: string
-          slug?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      comments: {
-        Row: {
-          author_email: string
-          author_name: string
-          content: string
-          created_at: string
-          id: string
-          post_id: string
-          status: string | null
-          updated_at: string
-        }
-        Insert: {
-          author_email: string
-          author_name: string
-          content: string
-          created_at?: string
-          id?: string
-          post_id: string
-          status?: string | null
-          updated_at?: string
-        }
-        Update: {
-          author_email?: string
-          author_name?: string
-          content?: string
-          created_at?: string
-          id?: string
-          post_id?: string
-          status?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "comments_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "blog_posts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       company_settings: {
         Row: {
@@ -235,7 +101,7 @@ export type Database = {
           currency?: string | null
           date_format?: string | null
           email?: string | null
-          id: number
+          id?: number
           logo?: string | null
           notifications_email?: boolean | null
           notifications_push?: boolean | null
@@ -259,21 +125,6 @@ export type Database = {
           theme?: string | null
           updated_at?: string | null
           website?: string | null
-        }
-        Relationships: []
-      }
-      dcel: {
-        Row: {
-          created_at: string
-          id: number
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-        }
-        Update: {
-          created_at?: string
-          id?: number
         }
         Relationships: []
       }
@@ -323,8 +174,10 @@ export type Database = {
           low_stock_level: number | null
           name: string
           quantity: number | null
+          reserved: number | null
           site_id: string | null
           status: string | null
+          total_stock: number | null
           type: string | null
           unit: string | null
           updated_at: string | null
@@ -341,8 +194,10 @@ export type Database = {
           low_stock_level?: number | null
           name: string
           quantity?: number | null
+          reserved?: number | null
           site_id?: string | null
           status?: string | null
+          total_stock?: number | null
           type?: string | null
           unit?: string | null
           updated_at?: string | null
@@ -359,116 +214,15 @@ export type Database = {
           low_stock_level?: number | null
           name?: string
           quantity?: number | null
+          reserved?: number | null
           site_id?: string | null
           status?: string | null
+          total_stock?: number | null
           type?: string | null
           unit?: string | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "items_site_id_fkey"
-            columns: ["site_id"]
-            isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          display_name: string | null
-          email: string | null
-          id: string
-          role: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name?: string | null
-          email?: string | null
-          id?: string
-          role?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name?: string | null
-          email?: string | null
-          id?: string
-          role?: string | null
-          updated_at?: string
-          user_id?: string
-        }
         Relationships: []
-      }
-      projects: {
-        Row: {
-          category_id: string | null
-          client_name: string | null
-          created_at: string | null
-          created_by: string | null
-          description: string | null
-          end_date: string | null
-          featured_image: string | null
-          gallery_images: Json | null
-          id: string
-          location: string | null
-          slug: string
-          start_date: string | null
-          status: string | null
-          title: string
-          updated_at: string | null
-        }
-        Insert: {
-          category_id?: string | null
-          client_name?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          end_date?: string | null
-          featured_image?: string | null
-          gallery_images?: Json | null
-          id?: string
-          location?: string | null
-          slug: string
-          start_date?: string | null
-          status?: string | null
-          title: string
-          updated_at?: string | null
-        }
-        Update: {
-          category_id?: string | null
-          client_name?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          end_date?: string | null
-          featured_image?: string | null
-          gallery_images?: Json | null
-          id?: string
-          location?: string | null
-          slug?: string
-          start_date?: string | null
-          status?: string | null
-          title?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "projects_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       quick_checkouts: {
         Row: {
@@ -482,7 +236,6 @@ export type Database = {
           quantity: number
           site_id: string | null
           status: string | null
-          updated_at: string | null
         }
         Insert: {
           asset_id: string
@@ -495,7 +248,6 @@ export type Database = {
           quantity: number
           site_id?: string | null
           status?: string | null
-          updated_at?: string | null
         }
         Update: {
           asset_id?: string
@@ -508,7 +260,6 @@ export type Database = {
           quantity?: number
           site_id?: string | null
           status?: string | null
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -556,7 +307,7 @@ export type Database = {
           item_id: string
           item_name: string
           last_updated: string | null
-          quantity: number
+          quantity: number | null
           site_id: string
           unit: string | null
         }
@@ -567,7 +318,7 @@ export type Database = {
           item_id: string
           item_name: string
           last_updated?: string | null
-          quantity?: number
+          quantity?: number | null
           site_id: string
           unit?: string | null
         }
@@ -578,7 +329,7 @@ export type Database = {
           item_id?: string
           item_name?: string
           last_updated?: string | null
-          quantity?: number
+          quantity?: number | null
           site_id?: string
           unit?: string | null
         }

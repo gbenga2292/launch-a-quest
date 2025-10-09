@@ -328,7 +328,8 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
       return waybill;
     }));
 
-    // Process returns - add quantity back to main inventory based on condition
+    // Process returns - add quantity back to main inventory ONLY for good items
+    // Damaged and missing items are tracked via site_transactions only
     returnData.items.forEach(returnItem => {
       if (returnItem.condition === 'good') {
         // Add good items back to main inventory
@@ -338,23 +339,8 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
           }
           return asset;
         }));
-      } else if (returnItem.condition === 'damaged') {
-        // Track damaged items (don't add back to inventory)
-        setAssets(prev => prev.map(asset => {
-          if (asset.id === returnItem.assetId && !asset.siteId) {
-            return { ...asset, damagedCount: (asset.damagedCount || 0) + returnItem.quantity, updatedAt: new Date() };
-          }
-          return asset;
-        }));
-      } else if (returnItem.condition === 'missing') {
-        // Track missing items
-        setAssets(prev => prev.map(asset => {
-          if (asset.id === returnItem.assetId && !asset.siteId) {
-            return { ...asset, missingCount: (asset.missingCount || 0) + returnItem.quantity, updatedAt: new Date() };
-          }
-          return asset;
-        }));
       }
+      // Damaged and missing are only tracked in site_transactions with condition field
     });
 
     const originalWaybill = waybills.find(wb => wb.id === returnData.waybillId && wb.type === 'waybill');

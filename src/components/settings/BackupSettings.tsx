@@ -140,7 +140,7 @@ export const BackupSettings = (props: any) => {
     setIsResetting(true);
     try {
       // Call backend API to reset database
-      await api.resetDatabase(selectedCategories);
+      await api.resetDatabase();
 
       // Reset frontend state for selected categories
       if (onResetAllData) {

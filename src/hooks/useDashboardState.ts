@@ -19,24 +19,31 @@ const transformApiAsset = (apiAsset: ApiAsset): Asset => ({
   id: apiAsset.id,
   name: apiAsset.name,
   description: apiAsset.description,
-  quantity: apiAsset.total_stock,
+  quantity: apiAsset.quantity,
+  total_stock: apiAsset.total_stock,
+  reserved: apiAsset.reserved,
+  unit: apiAsset.unit || '',
   unitOfMeasurement: apiAsset.unit || '',
   category: apiAsset.category as 'Dewatering' | 'Waterproofing',
   type: apiAsset.type as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
   location: apiAsset.location,
   siteId: apiAsset.site_id,
+  site_id: apiAsset.site_id,
   checkoutType: apiAsset.checkout_type as 'waybill' | 'quick_checkout' | 'reconciled',
+  checkout_type: apiAsset.checkout_type,
   service: '', // Not available in API
   status: apiAsset.status as 'active' | 'damaged' | 'missing' | 'maintenance',
   condition: apiAsset.condition as 'excellent' | 'good' | 'fair' | 'poor',
-  missingCount: 0, // Not available in API
-  damagedCount: 0, // Not available in API
   lowStockLevel: apiAsset.low_stock_level,
+  low_stock_level: apiAsset.low_stock_level,
   criticalStockLevel: apiAsset.critical_stock_level,
+  critical_stock_level: apiAsset.critical_stock_level,
   purchaseDate: undefined, // Not available in API
   cost: 0, // Not available in API
   createdAt: new Date(apiAsset.created_at),
+  created_at: apiAsset.created_at,
   updatedAt: new Date(apiAsset.updated_at),
+  updated_at: apiAsset.updated_at,
 });
 
 const transformApiWaybill = (apiWaybill: ApiWaybill): Waybill => ({
@@ -217,24 +224,19 @@ export const useDashboardState = () => {
     }
 
     // Create the return waybill using the existing waybill creation logic
-    await handleCreateWaybill({
-      site_id: waybillData.siteId,
-      return_to_site_id: waybillData.returnToSiteId,
-      items: waybillData.items.map(item => ({
-        id: item.assetId,
-        name: item.assetName,
-        quantity: item.quantity,
-        unit: '' // Not available in local type
-      })),
-      driver_name: waybillData.driverName,
+    return await handleCreateWaybill({
+      siteId: waybillData.siteId,
+      returnToSiteId: waybillData.returnToSiteId,
+      items: waybillData.items,
+      driverName: waybillData.driverName,
       vehicle: waybillData.vehicle,
       purpose: waybillData.purpose,
       service: waybillData.service,
-      expected_return_date: waybillData.expectedReturnDate?.toISOString(),
+      expectedReturnDate: waybillData.expectedReturnDate,
       status: 'outstanding',
       type: 'return',
-      issue_date: new Date().toISOString()
-    } as any);
+      issueDate: new Date()
+    });
   };
 
   const handleUpdateReturnWaybill = async (updatedData: {
@@ -371,7 +373,7 @@ export const useDashboardState = () => {
     setShowReturnForm(waybill as any);
   };
 
-  const handleOpenReturnDialog = (returnData: { waybillId: string; items: WaybillItem[] }) => {
+  const handleOpenReturnDialog = (returnData: { waybillId: string; items: any[] }) => {
     const waybill = waybills.find(wb => wb.id === returnData.waybillId);
     if (waybill) {
       setProcessingReturnWaybill(waybill as any);

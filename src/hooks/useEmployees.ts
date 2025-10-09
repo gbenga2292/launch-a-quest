@@ -16,9 +16,9 @@ export const useEmployees = () => {
         setEmployees(dbEmployees.map(emp => ({
           ...emp,
           id: emp.id.toString(),
-          status: emp.status === '1' ? 'active' : 'inactive',
-          createdAt: new Date(emp.created_at),
-          updatedAt: new Date(emp.updated_at)
+          status: emp.status as 'active' | 'inactive',
+          createdAt: new Date(),
+          updatedAt: new Date()
         })));
       } catch (error) {
         console.error('Failed to load employees:', error);
@@ -37,10 +37,13 @@ export const useEmployees = () => {
   const addEmployee = async (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       const newEmployee = await api.createEmployee({
-        ...employee,
-        status: '1'
+        name: employee.name,
+        role: employee.role,
+        phone: employee.phone,
+        email: employee.email,
+        status: employee.status
       });
-      setEmployees(prev => [...prev, { ...newEmployee, id: newEmployee.id.toString(), status: 'active', createdAt: new Date(newEmployee.created_at), updatedAt: new Date(newEmployee.updated_at) }]);
+      setEmployees(prev => [...prev, { ...newEmployee, id: newEmployee.id.toString(), status: newEmployee.status as 'active' | 'inactive', createdAt: new Date(), updatedAt: new Date() }]);
       logActivity({
         userId: 'current_user',
         userName: 'Admin',
@@ -66,8 +69,11 @@ export const useEmployees = () => {
   const saveEmployee = async (employee: Employee) => {
     try {
       await api.updateEmployee(employee.id, {
-        ...employee,
-        status: employee.status === 'active' ? '1' : '0'
+        name: employee.name,
+        role: employee.role,
+        phone: employee.phone,
+        email: employee.email,
+        status: employee.status
       });
       setEmployees(prev => prev.map(emp =>
         emp.id === employee.id

@@ -56,6 +56,8 @@ export interface AssetAnalytics {
     damageRate: number; // percentage
     missingRate: number; // percentage
     returnRate: number; // percentage of successful returns
+    damagedCount: number; // total damaged items count
+    missingItemsCount: number; // total missing items count
   };
   downtime: {
     totalDowntimeDays: number;
@@ -70,6 +72,14 @@ export const calculateAssetAnalytics = (
   siteTransactions: SiteTransaction[],
   sites: Site[]
 ): AssetAnalytics => {
+  // Calculate damaged and missing counts from site_transactions
+  const damagedCount = siteTransactions
+    .filter(st => st.assetId === asset.id && st.condition === 'damaged')
+    .reduce((sum, st) => sum + st.quantity, 0);
+  
+  const missingCount = siteTransactions
+    .filter(st => st.assetId === asset.id && st.condition === 'missing')
+    .reduce((sum, st) => sum + st.quantity, 0);
   // Usage Frequency
   const waybillUsages = waybills.flatMap(wb =>
     wb.items.filter(item => item.assetId === asset.id)
@@ -175,7 +185,9 @@ export const calculateAssetAnalytics = (
     failureRate: {
       damageRate,
       missingRate,
-      returnRate
+      returnRate,
+      damagedCount, // Added: total damaged items from site_transactions
+      missingItemsCount: missingCount // Added: total missing items from site_transactions
     },
     downtime: {
       totalDowntimeDays: downtimeDays,

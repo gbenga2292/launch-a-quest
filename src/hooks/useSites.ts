@@ -1,33 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, Site as APISite } from '@/services/api';
+import { api } from '@/services/api';
 import { Site } from '@/types/asset';
-
-// Helper functions to convert between API types and local types
-const apiSiteToSite = (apiSite: APISite): Site => ({
-  id: apiSite.id,
-  name: apiSite.name,
-  location: apiSite.location || '',
-  description: apiSite.description,
-  clientName: apiSite.client_name,
-  contactPerson: apiSite.contact_person,
-  phone: apiSite.phone,
-  services: [],
-  status: apiSite.status as any,
-  createdAt: new Date(apiSite.created_at),
-  updatedAt: new Date(apiSite.updated_at)
-});
-
-const siteToAPISite = (site: Omit<Site, 'id' | 'createdAt' | 'updatedAt'>): Omit<APISite, 'id' | 'created_at' | 'updated_at'> => ({
-  name: site.name,
-  location: site.location,
-  description: site.description,
-  client_name: site.clientName,
-  contact_person: site.contactPerson,
-  phone: site.phone,
-  status: site.status
-});
 
 export const useSites = () => {
   const { toast } = useToast();
@@ -41,7 +16,19 @@ export const useSites = () => {
       try {
         setLoading(true);
         const apiSites = await api.getSites();
-        const sitesData = apiSites.map(apiSiteToSite);
+        const sitesData = apiSites.map(apiSite => ({
+          id: apiSite.id,
+          name: apiSite.name,
+          location: apiSite.location || '',
+          description: apiSite.description,
+          clientName: apiSite.client_name,
+          contactPerson: apiSite.contact_person,
+          phone: apiSite.phone,
+          services: [],
+          status: apiSite.status as 'active' | 'inactive',
+          createdAt: new Date(apiSite.created_at),
+          updatedAt: new Date(apiSite.updated_at)
+        }));
         setSites(sitesData);
       } catch (error) {
         console.error('Failed to load sites:', error);
@@ -67,9 +54,29 @@ export const useSites = () => {
       return;
     }
     try {
-      const apiSiteData = siteToAPISite(siteData);
+      const apiSiteData = {
+        name: siteData.name,
+        location: siteData.location,
+        description: siteData.description,
+        client_name: siteData.clientName,
+        contact_person: siteData.contactPerson,
+        phone: siteData.phone,
+        status: siteData.status
+      };
       const createdSite = await api.createSite(apiSiteData);
-      const newSite = apiSiteToSite(createdSite);
+      const newSite = {
+        id: createdSite.id,
+        name: createdSite.name,
+        location: createdSite.location || '',
+        description: createdSite.description,
+        clientName: createdSite.client_name,
+        contactPerson: createdSite.contact_person,
+        phone: createdSite.phone,
+        services: [],
+        status: createdSite.status as 'active' | 'inactive',
+        createdAt: new Date(createdSite.created_at),
+        updatedAt: new Date(createdSite.updated_at)
+      };
       setSites(prev => [...prev, newSite]);
       toast({
         title: "Success",
@@ -95,7 +102,15 @@ export const useSites = () => {
       return;
     }
     try {
-      const apiSiteData = siteToAPISite(updatedSite);
+      const apiSiteData = {
+        name: updatedSite.name,
+        location: updatedSite.location,
+        description: updatedSite.description,
+        client_name: updatedSite.clientName,
+        contact_person: updatedSite.contactPerson,
+        phone: updatedSite.phone,
+        status: updatedSite.status
+      };
       await api.updateSite(updatedSite.id, apiSiteData);
       const siteWithUpdatedDate = {
         ...updatedSite,

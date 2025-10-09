@@ -281,7 +281,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                     
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
-                        {asset.updated_at instanceof Date ? asset.updated_at.toLocaleDateString() : new Date(asset.updated_at).toLocaleDateString()}
+                        {asset.updatedAt ? (typeof asset.updatedAt === 'string' ? new Date(asset.updatedAt).toLocaleDateString() : asset.updatedAt.toLocaleDateString()) : 'N/A'}
                       </span>
                     </TableCell>
                     

@@ -22,7 +22,7 @@ import { useBackupRestore } from "@/hooks/useBackupRestore";
 export const CompanySettings = () => {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
-  const { companySettings, loading: loadingSettings, handleSaveCompanySettings, setCompanySettings } = useCompanySettings();
+  const { companySettings, loading: loadingSettings, handleSaveCompanySettings, setSettings: setCompanySettings } = useCompanySettings();
   const { employees, loading: loadingEmployees, addEmployee, removeEmployee, setEmployees } = useEmployees();
   const { vehicles, loading: loadingVehicles, addVehicle, removeVehicle, setVehicles } = useVehicles();
   const { isLoading, error, backupProgress, backupOptions, selectedBackupItems, setSelectedBackupItems, handleBackup, handleRestore } = useBackupRestore(companySettings);
@@ -91,7 +91,7 @@ export const CompanySettings = () => {
 
   const handleAddEmployee = () => {
     if (!employeeName.trim()) return;
-    addEmployee({ name: employeeName.trim(), role: employeeRole });
+    addEmployee({ name: employeeName.trim(), role: employeeRole, status: 'active' });
     setEmployeeName("");
     setEmployeeRole("driver");
   };
@@ -106,15 +106,17 @@ export const CompanySettings = () => {
     handleSaveCompanySettings(formData);
   };
 
+  const [isLoadingReset, setIsLoadingReset] = useState(false);
+  
   const handleReset = async () => {
-    setIsLoading(true);
+    setIsLoadingReset(true);
     try {
       const { api } = await import('@/services/api');
       await api.resetDatabase();
 
       setEmployees([]);
       setVehicles([]);
-      const defaultSettings = {
+      const defaultSettings: CompanySettingsType = {
         companyName: "Dewatering Construction Ltd",
         logo: undefined,
         address: "",
@@ -122,8 +124,8 @@ export const CompanySettings = () => {
         email: "",
         website: "",
         currency: "USD",
-        dateFormat: "dd/MM/yyyy",
-        theme: "light",
+        dateFormat: "dd/MM/yyyy" as "MM/dd/yyyy" | "dd/MM/yyyy" | "yyyy-MM-dd",
+        theme: "light" as "light" | "dark" | "system",
         notifications: { email: true, push: true }
       };
       setCompanySettings(defaultSettings);
@@ -148,7 +150,7 @@ export const CompanySettings = () => {
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setIsLoadingReset(false);
       setIsResetOpen(false);
     }
   };

@@ -38,8 +38,8 @@ export const migrateLocalStorageToDatabase = async (): Promise<void> => {
             name: site.name,
             location: site.location,
             description: site.description,
-            client_name: site.clientName,
-            contact_person: site.contactPerson,
+            clientName: site.clientName,
+            contactPerson: site.contactPerson,
             phone: site.phone,
             status: site.status
           });
@@ -113,22 +113,17 @@ export const migrateLocalStorageToDatabase = async (): Promise<void> => {
       for (const waybill of waybills) {
         try {
           await api.createWaybill({
-            site_id: waybill.siteId,
-            driver_name: waybill.driverName,
+            siteId: waybill.siteId,
+            driverName: waybill.driverName,
             vehicle: waybill.vehicle,
-            issue_date: waybill.issueDate.toISOString(),
-            expected_return_date: waybill.expectedReturnDate?.toISOString(),
+            issueDate: waybill.issueDate,
+            expectedReturnDate: waybill.expectedReturnDate,
             purpose: waybill.purpose,
             service: waybill.service,
-            return_to_site_id: waybill.returnToSiteId,
+            returnToSiteId: waybill.returnToSiteId,
             status: waybill.status,
             type: waybill.type,
-            items: waybill.items.map(item => ({
-              id: item.assetId,
-              name: item.assetName,
-              quantity: item.quantity,
-              unit: 'pieces' // Default unit
-            }))
+            items: waybill.items
           });
         } catch (error) {
           console.error(`Failed to migrate waybill ${waybill.id}:`, error);
@@ -143,12 +138,12 @@ export const migrateLocalStorageToDatabase = async (): Promise<void> => {
       for (const checkout of quickCheckouts) {
         try {
           await api.createQuickCheckout({
-            asset_id: checkout.assetId,
-            asset_name: checkout.assetName,
+            assetId: checkout.assetId,
+            assetName: checkout.assetName,
             quantity: checkout.quantity,
             employee: checkout.employee,
-            checkout_date: checkout.checkoutDate.toISOString(),
-            expected_return_days: checkout.expectedReturnDays,
+            checkoutDate: checkout.checkoutDate,
+            expectedReturnDays: checkout.expectedReturnDays,
             status: checkout.status
           });
         } catch (error) {
@@ -164,17 +159,17 @@ export const migrateLocalStorageToDatabase = async (): Promise<void> => {
       for (const transaction of siteTransactions) {
         try {
           await api.createSiteTransaction({
-            site_id: transaction.siteId,
-            asset_id: transaction.assetId,
-            asset_name: transaction.assetName,
+            siteId: transaction.siteId,
+            assetId: transaction.assetId,
+            assetName: transaction.assetName,
             quantity: transaction.quantity,
             type: transaction.type,
-            transaction_type: transaction.transactionType,
-            reference_id: transaction.referenceId,
-            reference_type: transaction.referenceType,
+            transactionType: transaction.transactionType,
+            referenceId: transaction.referenceId,
+            referenceType: transaction.referenceType,
             condition: transaction.condition,
             notes: transaction.notes,
-            created_by: transaction.createdBy
+            createdBy: transaction.createdBy
           });
         } catch (error) {
           console.error(`Failed to migrate site transaction ${transaction.id}:`, error);

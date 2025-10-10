@@ -7,67 +7,68 @@ import { Waybill, WaybillItem, QuickCheckout, ReturnBill, SiteTransaction, Asset
 // Helper functions to convert between API types and local types
 const apiWaybillToWaybill = (apiWaybill: APIWaybill): Waybill => ({
   id: apiWaybill.id.toString(),
-  siteId: apiWaybill.site_id,
-  driverName: apiWaybill.driver_name,
+  siteId: apiWaybill.siteId,
+  driverName: apiWaybill.driverName,
   vehicle: apiWaybill.vehicle,
-  issueDate: apiWaybill.issue_date ? new Date(apiWaybill.issue_date) : new Date(),
-  expectedReturnDate: apiWaybill.expected_return_date ? new Date(apiWaybill.expected_return_date) : undefined,
+  issueDate: apiWaybill.issueDate,
+  expectedReturnDate: apiWaybill.expectedReturnDate,
   purpose: apiWaybill.purpose,
   service: apiWaybill.service,
-  returnToSiteId: apiWaybill.return_to_site_id,
+  returnToSiteId: apiWaybill.returnToSiteId,
   status: apiWaybill.status as any,
   type: apiWaybill.type as any,
   items: apiWaybill.items.map(item => ({
-    assetId: item.id,
-    assetName: item.name,
+    assetId: item.assetId,
+    assetName: item.assetName,
     quantity: item.quantity,
-    returnedQuantity: 0, // This might need to be calculated differently
-    status: 'outstanding' as const
+    returnedQuantity: item.returnedQuantity || 0,
+    status: item.status || 'outstanding' as const
   })),
-  createdAt: new Date(apiWaybill.created_at),
-  updatedAt: new Date(apiWaybill.updated_at)
+  createdAt: apiWaybill.createdAt,
+  updatedAt: apiWaybill.updatedAt
 });
 
-const waybillToAPIWaybill = (waybill: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'>): Omit<APIWaybill, 'id' | 'created_at' | 'updated_at'> => ({
-  site_id: waybill.siteId,
-  driver_name: waybill.driverName,
+const waybillToAPIWaybill = (waybill: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'>): Partial<APIWaybill> => ({
+  siteId: waybill.siteId,
+  driverName: waybill.driverName,
   vehicle: waybill.vehicle,
-  issue_date: waybill.issueDate?.toISOString(),
-  expected_return_date: waybill.expectedReturnDate?.toISOString(),
+  issueDate: waybill.issueDate,
+  expectedReturnDate: waybill.expectedReturnDate,
   purpose: waybill.purpose,
   service: waybill.service,
-  return_to_site_id: waybill.returnToSiteId,
+  returnToSiteId: waybill.returnToSiteId,
   status: waybill.status,
   type: waybill.type,
   items: waybill.items.map(item => ({
-    id: item.assetId,
-    name: item.assetName,
+    assetId: item.assetId,
+    assetName: item.assetName,
     quantity: item.quantity,
-    unit: '' // This might need to be fetched from assets
+    returnedQuantity: item.returnedQuantity,
+    status: item.status
   }))
 });
 
 const apiQuickCheckoutToQuickCheckout = (apiCheckout: APIQuickCheckout): QuickCheckout => ({
   id: apiCheckout.id,
-  assetId: apiCheckout.asset_id,
-  assetName: apiCheckout.asset_name,
+  assetId: apiCheckout.assetId,
+  assetName: apiCheckout.assetName,
   quantity: apiCheckout.quantity,
   employee: apiCheckout.employee,
-  checkoutDate: apiCheckout.checkout_date ? new Date(apiCheckout.checkout_date) : new Date(),
-  expectedReturnDays: apiCheckout.expected_return_days,
+  checkoutDate: apiCheckout.checkoutDate,
+  expectedReturnDays: apiCheckout.expectedReturnDays,
   status: apiCheckout.status as any,
-  siteId: apiCheckout.site_id
+  siteId: apiCheckout.siteId
 });
 
-const quickCheckoutToAPIQuickCheckout = (checkout: Omit<QuickCheckout, 'id' | 'createdAt'>): Omit<APIQuickCheckout, 'id' | 'created_at'> => ({
-  asset_id: checkout.assetId,
-  asset_name: checkout.assetName,
+const quickCheckoutToAPIQuickCheckout = (checkout: Omit<QuickCheckout, 'id' | 'createdAt'>): Partial<APIQuickCheckout> => ({
+  assetId: checkout.assetId,
+  assetName: checkout.assetName,
   quantity: checkout.quantity,
   employee: checkout.employee,
-  checkout_date: checkout.checkoutDate?.toISOString(),
-  expected_return_days: checkout.expectedReturnDays,
+  checkoutDate: checkout.checkoutDate,
+  expectedReturnDays: checkout.expectedReturnDays,
   status: checkout.status,
-  site_id: checkout.siteId
+  siteId: checkout.siteId
 });
 
 export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispatch<React.SetStateAction<any[]>>, siteTransactions: SiteTransaction[], setSiteTransactions: React.Dispatch<React.SetStateAction<SiteTransaction[]>>, handleAddSiteTransaction: (transaction: Omit<SiteTransaction, 'id' | 'createdAt'>) => Promise<void>, handleUpdateAssets: (assets: any[]) => Promise<void>, handleAddAsset: (asset: any) => Promise<void>) => {

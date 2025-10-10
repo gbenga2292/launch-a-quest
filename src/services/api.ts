@@ -673,7 +673,13 @@ export const api = {
   },
 
   async createWaybill(waybill: Partial<WaybillFE>): Promise<WaybillFE> {
-    const id = `wb_${Date.now()}`;
+    // Get the count of existing waybills to generate sequential ID
+    const { count } = await supabase
+      .from('waybills')
+      .select('*', { count: 'exact', head: true });
+    
+    const waybillNumber = ((count || 0) + 1).toString().padStart(3, '0');
+    const id = `WB${waybillNumber}`;
     
     // Deduct inventory for items in the waybill
     if (waybill.items && waybill.items.length > 0) {
@@ -975,8 +981,11 @@ export const api = {
   },
 
   async sendToSite(waybillId: string, targetSiteId: string): Promise<void> {
-    // Use type assertion for RPC call
-    const { error } = await (supabase.rpc as any)('finalize_waybill_and_update_stock', { waybill_id_to_finalize: waybillId });
+    // Update waybill status to sent_to_site
+    const { error } = await supabase
+      .from('waybills')
+      .update({ status: 'sent_to_site' })
+      .eq('id', waybillId);
 
     if (error) throw new Error('Failed to send to site: ' + error.message);
   },

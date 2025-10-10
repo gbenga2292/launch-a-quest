@@ -49,24 +49,24 @@ const transformApiAsset = (apiAsset: ApiAsset): Asset => ({
 const transformApiWaybill = (apiWaybill: ApiWaybill): Waybill => ({
   id: apiWaybill.id,
   items: apiWaybill.items.map(item => ({
-    assetId: item.id,
-    assetName: item.name,
+    assetId: item.assetId,
+    assetName: item.assetName,
     quantity: item.quantity,
-    returnedQuantity: 0, // Not available in API
-    status: 'outstanding' as 'outstanding' | 'partial_returned' | 'return_completed' | 'lost' | 'damaged', // Default
+    returnedQuantity: item.returnedQuantity || 0,
+    status: item.status || 'outstanding' as const
   })),
-  siteId: apiWaybill.site_id,
-  driverName: apiWaybill.driver_name,
+  siteId: apiWaybill.siteId,
+  driverName: apiWaybill.driverName,
   vehicle: apiWaybill.vehicle,
-  issueDate: new Date(apiWaybill.issue_date || new Date()),
-  expectedReturnDate: apiWaybill.expected_return_date ? new Date(apiWaybill.expected_return_date) : undefined,
+  issueDate: apiWaybill.issueDate,
+  expectedReturnDate: apiWaybill.expectedReturnDate,
   purpose: apiWaybill.purpose,
   service: apiWaybill.service,
-  returnToSiteId: apiWaybill.return_to_site_id,
-  status: apiWaybill.status as 'outstanding' | 'partial_returned' | 'return_completed' | 'sent_to_site',
-  type: apiWaybill.type as 'waybill' | 'return',
-  createdAt: new Date(apiWaybill.created_at),
-  updatedAt: new Date(apiWaybill.updated_at),
+  returnToSiteId: apiWaybill.returnToSiteId,
+  status: apiWaybill.status as any,
+  type: apiWaybill.type as any,
+  createdAt: apiWaybill.createdAt,
+  updatedAt: apiWaybill.updatedAt,
 });
 
 const transformApiSite = (apiSite: ApiSite): Site => ({
@@ -74,13 +74,13 @@ const transformApiSite = (apiSite: ApiSite): Site => ({
   name: apiSite.name,
   location: apiSite.location,
   description: apiSite.description,
-  clientName: apiSite.client_name,
-  contactPerson: apiSite.contact_person,
+  clientName: apiSite.clientName,
+  contactPerson: apiSite.contactPerson,
   phone: apiSite.phone,
-  services: [], // Not available in API
-  status: apiSite.status as 'active' | 'inactive',
-  createdAt: new Date(apiSite.created_at),
-  updatedAt: new Date(apiSite.updated_at),
+  services: apiSite.services || [],
+  status: apiSite.status as any,
+  createdAt: apiSite.createdAt,
+  updatedAt: apiSite.updatedAt,
 });
 
 const transformApiEmployee = (apiEmployee: ApiEmployee): Employee => ({
@@ -89,25 +89,25 @@ const transformApiEmployee = (apiEmployee: ApiEmployee): Employee => ({
   role: apiEmployee.role,
   phone: apiEmployee.phone,
   email: apiEmployee.email,
-  status: apiEmployee.status as 'active' | 'inactive',
-  createdAt: new Date(apiEmployee.created_at),
-  updatedAt: new Date(apiEmployee.updated_at),
+  status: apiEmployee.status as any,
+  createdAt: apiEmployee.createdAt,
+  updatedAt: apiEmployee.updatedAt,
 });
 
 const transformApiSiteTransaction = (apiTransaction: ApiSiteTransaction): SiteTransaction => ({
   id: apiTransaction.id,
-  siteId: apiTransaction.site_id,
-  assetId: apiTransaction.asset_id,
-  assetName: apiTransaction.asset_name,
+  siteId: apiTransaction.siteId,
+  assetId: apiTransaction.assetId,
+  assetName: apiTransaction.assetName,
   quantity: apiTransaction.quantity,
-  type: apiTransaction.type as 'in' | 'out',
-  transactionType: apiTransaction.transaction_type as 'waybill' | 'return',
-  referenceId: apiTransaction.reference_id,
-  referenceType: apiTransaction.reference_type as 'waybill' | 'return_waybill' | 'quick_checkout',
-  condition: apiTransaction.condition as 'good' | 'damaged' | 'missing',
+  type: apiTransaction.type as any,
+  transactionType: apiTransaction.transactionType as any,
+  referenceId: apiTransaction.referenceId,
+  referenceType: apiTransaction.referenceType as any,
+  condition: apiTransaction.condition as any,
   notes: apiTransaction.notes,
-  createdAt: new Date(apiTransaction.created_at),
-  createdBy: apiTransaction.created_by,
+  createdAt: apiTransaction.createdAt,
+  createdBy: apiTransaction.createdBy,
 });
 
 export const useDashboardState = () => {

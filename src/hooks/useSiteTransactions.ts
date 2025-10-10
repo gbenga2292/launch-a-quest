@@ -14,20 +14,20 @@ export const useSiteTransactions = () => {
       try {
         setLoading(true);
         const apiTransactions = await api.getSiteTransactions();
-        const transactionsData = apiTransactions.map(apiTrans => ({
-          id: apiTrans.id,
-          siteId: apiTrans.site_id,
-          assetId: apiTrans.asset_id,
-          assetName: apiTrans.asset_name,
-          quantity: apiTrans.quantity,
-          type: apiTrans.type as 'in' | 'out',
-          transactionType: apiTrans.transaction_type as 'waybill' | 'return',
-          referenceId: apiTrans.reference_id,
-          referenceType: apiTrans.reference_type as 'waybill' | 'return_waybill' | 'quick_checkout',
-          condition: apiTrans.condition as 'good' | 'damaged' | 'missing',
-          notes: apiTrans.notes,
-          createdAt: new Date(apiTrans.created_at),
-          createdBy: apiTrans.created_by
+        const transactionsData = apiTransactions.map(t => ({
+          id: t.id,
+          siteId: t.siteId,
+          assetId: t.assetId,
+          assetName: t.assetName,
+          quantity: t.quantity || 0,
+          type: t.type as any,
+          transactionType: t.transactionType as any,
+          referenceId: t.referenceId,
+          referenceType: t.referenceType as any,
+          condition: t.condition as any,
+          notes: t.notes,
+          createdAt: t.createdAt,
+          createdBy: t.createdBy,
         }));
         setSiteTransactions(transactionsData);
       } catch (error) {
@@ -46,34 +46,33 @@ export const useSiteTransactions = () => {
 
   const handleAddSiteTransaction = async (transactionData: Omit<SiteTransaction, 'id' | 'createdAt'>) => {
     try {
-      const apiTransactionData = {
-        site_id: transactionData.siteId,
-        asset_id: transactionData.assetId,
-        asset_name: transactionData.assetName,
+      const createdTransaction = await api.createSiteTransaction({
+        siteId: transactionData.siteId,
+        assetId: transactionData.assetId,
+        assetName: transactionData.assetName,
         quantity: transactionData.quantity,
         type: transactionData.type,
-        transaction_type: transactionData.transactionType,
-        reference_id: transactionData.referenceId,
-        reference_type: transactionData.referenceType,
+        transactionType: transactionData.transactionType,
+        referenceId: transactionData.referenceId,
+        referenceType: transactionData.referenceType,
         condition: transactionData.condition,
         notes: transactionData.notes,
-        created_by: transactionData.createdBy
-      };
-      const createdTransaction = await api.createSiteTransaction(apiTransactionData);
+        createdBy: transactionData.createdBy
+      });
       const newTransaction = {
         id: createdTransaction.id,
-        siteId: createdTransaction.site_id,
-        assetId: createdTransaction.asset_id,
-        assetName: createdTransaction.asset_name,
-        quantity: createdTransaction.quantity,
-        type: createdTransaction.type as 'in' | 'out',
-        transactionType: createdTransaction.transaction_type as 'waybill' | 'return',
-        referenceId: createdTransaction.reference_id,
-        referenceType: createdTransaction.reference_type as 'waybill' | 'return_waybill' | 'quick_checkout',
-        condition: createdTransaction.condition as 'good' | 'damaged' | 'missing',
+        siteId: createdTransaction.siteId,
+        assetId: createdTransaction.assetId,
+        assetName: createdTransaction.assetName,
+        quantity: createdTransaction.quantity || 0,
+        type: createdTransaction.type as any,
+        transactionType: createdTransaction.transactionType as any,
+        referenceId: createdTransaction.referenceId,
+        referenceType: createdTransaction.referenceType as any,
+        condition: createdTransaction.condition as any,
         notes: createdTransaction.notes,
-        createdAt: new Date(createdTransaction.created_at),
-        createdBy: createdTransaction.created_by
+        createdAt: createdTransaction.createdAt,
+        createdBy: createdTransaction.createdBy,
       };
       setSiteTransactions(prev => [...prev, newTransaction]);
     } catch (error) {

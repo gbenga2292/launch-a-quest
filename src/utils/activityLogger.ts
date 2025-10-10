@@ -22,11 +22,11 @@ const syncLocalStorageActivities = async (): Promise<void> => {
     for (const activity of localActivities) {
       try {
         await api.createActivity({
-          user_id: activity.userId,
-          user_name: activity.userName,
+          userId: activity.userId,
+          userName: activity.userName,
           action: activity.action,
           entity: activity.entity,
-          entity_id: activity.entityId,
+          entityId: activity.entityId,
           details: activity.details
         });
       } catch (error) {

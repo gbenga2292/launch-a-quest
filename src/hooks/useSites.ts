@@ -16,18 +16,18 @@ export const useSites = () => {
       try {
         setLoading(true);
         const apiSites = await api.getSites();
-        const sitesData = apiSites.map(apiSite => ({
-          id: apiSite.id,
-          name: apiSite.name,
-          location: apiSite.location || '',
-          description: apiSite.description,
-          clientName: apiSite.client_name,
-          contactPerson: apiSite.contact_person,
-          phone: apiSite.phone,
-          services: [],
-          status: apiSite.status as 'active' | 'inactive',
-          createdAt: new Date(apiSite.created_at),
-          updatedAt: new Date(apiSite.updated_at)
+        const sitesData = apiSites.map(site => ({
+          id: site.id,
+          name: site.name,
+          location: site.location || '',
+          description: site.description,
+          clientName: site.clientName,
+          contactPerson: site.contactPerson,
+          phone: site.phone,
+          services: site.services || [],
+          status: site.status as any,
+          createdAt: site.createdAt,
+          updatedAt: site.updatedAt,
         }));
         setSites(sitesData);
       } catch (error) {
@@ -54,28 +54,27 @@ export const useSites = () => {
       return;
     }
     try {
-      const apiSiteData = {
+      const createdSite = await api.createSite({
         name: siteData.name,
         location: siteData.location,
         description: siteData.description,
-        client_name: siteData.clientName,
-        contact_person: siteData.contactPerson,
+        clientName: siteData.clientName,
+        contactPerson: siteData.contactPerson,
         phone: siteData.phone,
         status: siteData.status
-      };
-      const createdSite = await api.createSite(apiSiteData);
+      });
       const newSite = {
         id: createdSite.id,
         name: createdSite.name,
         location: createdSite.location || '',
         description: createdSite.description,
-        clientName: createdSite.client_name,
-        contactPerson: createdSite.contact_person,
+        clientName: createdSite.clientName,
+        contactPerson: createdSite.contactPerson,
         phone: createdSite.phone,
-        services: [],
-        status: createdSite.status as 'active' | 'inactive',
-        createdAt: new Date(createdSite.created_at),
-        updatedAt: new Date(createdSite.updated_at)
+        services: createdSite.services || [],
+        status: createdSite.status as any,
+        createdAt: createdSite.createdAt,
+        updatedAt: createdSite.updatedAt,
       };
       setSites(prev => [...prev, newSite]);
       toast({
@@ -102,16 +101,15 @@ export const useSites = () => {
       return;
     }
     try {
-      const apiSiteData = {
+      await api.updateSite(updatedSite.id, {
         name: updatedSite.name,
         location: updatedSite.location,
         description: updatedSite.description,
-        client_name: updatedSite.clientName,
-        contact_person: updatedSite.contactPerson,
+        clientName: updatedSite.clientName,
+        contactPerson: updatedSite.contactPerson,
         phone: updatedSite.phone,
         status: updatedSite.status
-      };
-      await api.updateSite(updatedSite.id, apiSiteData);
+      });
       const siteWithUpdatedDate = {
         ...updatedSite,
         updatedAt: new Date()

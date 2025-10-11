@@ -192,9 +192,11 @@ export const useDashboardState = () => {
         return sum + (wbItem?.quantity || 0);
       }, 0);
 
-      // Check effective site stock (current site quantity minus pending returns)
-      const siteAsset = assets.find(a => a.id === item.assetId && a.siteId === waybillData.siteId);
-      const currentSiteQty = siteAsset ? siteAsset.quantity : 0;
+      // Check effective site stock using site_inventory table
+      const siteInventoryItem = siteInventory.find(si => 
+        si.itemId === item.assetId && si.siteId === waybillData.siteId
+      );
+      const currentSiteQty = siteInventoryItem ? siteInventoryItem.quantity : 0;
       const effectiveAvailable = currentSiteQty - pendingQty;
 
       if (pendingQty > 0) {

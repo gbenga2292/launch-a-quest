@@ -35,39 +35,10 @@ export const useSiteInventory = () => {
     const loadSiteInventory = async () => {
       try {
         setLoading(true);
-        // Compute materials at site directly from waybills to ensure completeness
-        const waybills = await api.getWaybills();
-        const inventoryMap = new Map<string, SiteInventoryItem>();
-
-        waybills
-          .filter((wb: any) => (wb.type === 'waybill') && (wb.status === 'sent_to_site'))
-          .forEach((wb: any) => {
-            const siteId = wb.return_to_site_id && wb.return_to_site_id !== '' ? wb.return_to_site_id : wb.site_id;
-            const updatedAt = new Date(wb.updated_at || wb.created_at);
-            (wb.items || []).forEach((it: any) => {
-              const key = `${siteId}_${it.id}`;
-              const existing = inventoryMap.get(key);
-              if (existing) {
-                existing.quantity += it.quantity || 0;
-                // Keep most recent timestamp
-                if (existing.lastUpdated < updatedAt) existing.lastUpdated = updatedAt;
-              } else {
-                inventoryMap.set(key, {
-                  id: key,
-                  siteId,
-                  itemId: it.id,
-                  itemName: it.name,
-                  quantity: it.quantity || 0,
-                  unit: it.unit,
-                  category: undefined,
-                  lastUpdated: updatedAt,
-                  createdAt: updatedAt,
-                });
-              }
-            });
-          });
-
-        setSiteInventory(Array.from(inventoryMap.values()));
+        // Load from actual site_inventory table
+        const apiInventory = await api.getSiteInventory();
+        const inventory = apiInventory.map(apiToLocal);
+        setSiteInventory(inventory);
       } catch (error) {
         console.error('Failed to load site inventory:', error);
         toast({
@@ -88,35 +59,9 @@ export const useSiteInventory = () => {
 
   const refreshSiteInventory = async () => {
     try {
-      const waybills = await api.getWaybills();
-      const inventoryMap = new Map<string, SiteInventoryItem>();
-      waybills
-        .filter((wb: any) => (wb.type === 'waybill') && (wb.status === 'sent_to_site'))
-        .forEach((wb: any) => {
-          const siteId = wb.return_to_site_id && wb.return_to_site_id !== '' ? wb.return_to_site_id : wb.site_id;
-          const updatedAt = new Date(wb.updated_at || wb.created_at);
-          (wb.items || []).forEach((it: any) => {
-            const key = `${siteId}_${it.id}`;
-            const existing = inventoryMap.get(key);
-            if (existing) {
-              existing.quantity += it.quantity || 0;
-              if (existing.lastUpdated < updatedAt) existing.lastUpdated = updatedAt;
-            } else {
-              inventoryMap.set(key, {
-                id: key,
-                siteId,
-                itemId: it.id,
-                itemName: it.name,
-                quantity: it.quantity || 0,
-                unit: it.unit,
-                category: undefined,
-                lastUpdated: updatedAt,
-                createdAt: updatedAt,
-              });
-            }
-          });
-        });
-      setSiteInventory(Array.from(inventoryMap.values()));
+      const apiInventory = await api.getSiteInventory();
+      const inventory = apiInventory.map(apiToLocal);
+      setSiteInventory(inventory);
     } catch (error) {
       console.error('Failed to refresh site inventory:', error);
     }

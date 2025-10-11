@@ -137,7 +137,7 @@ export const useDashboardState = () => {
     handleProcessReturn,
     handleQuickCheckout,
     handleReturnItem,
-  } = useWaybills(assets, sites, setAssets, siteTransactions, setSiteTransactions, handleAddSiteTransaction, handleUpdateAssets, handleAddAsset);
+  } = useWaybills(assets, sites, setAssets, siteTransactions, setSiteTransactions, handleAddSiteTransaction, handleUpdateAssets, handleAddAsset, refreshSiteInventory);
 
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem("activeTab");

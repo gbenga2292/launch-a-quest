@@ -71,7 +71,17 @@ const quickCheckoutToAPIQuickCheckout = (checkout: Omit<QuickCheckout, 'id' | 'c
   siteId: checkout.siteId
 });
 
-export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispatch<React.SetStateAction<any[]>>, siteTransactions: SiteTransaction[], setSiteTransactions: React.Dispatch<React.SetStateAction<SiteTransaction[]>>, handleAddSiteTransaction: (transaction: Omit<SiteTransaction, 'id' | 'createdAt'>) => Promise<void>, handleUpdateAssets: (assets: any[]) => Promise<void>, handleAddAsset: (asset: any) => Promise<void>) => {
+export const useWaybills = (
+  assets: any[], 
+  sites: any[], 
+  setAssets: React.Dispatch<React.SetStateAction<any[]>>, 
+  siteTransactions: SiteTransaction[], 
+  setSiteTransactions: React.Dispatch<React.SetStateAction<SiteTransaction[]>>, 
+  handleAddSiteTransaction: (transaction: Omit<SiteTransaction, 'id' | 'createdAt'>) => Promise<void>, 
+  handleUpdateAssets: (assets: any[]) => Promise<void>, 
+  handleAddAsset: (asset: any) => Promise<void>,
+  refreshSiteInventory?: () => Promise<void>
+) => {
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
 
@@ -275,7 +285,12 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
 
       await Promise.all(transactions.map(handleAddSiteTransaction));
 
-      // 5. Update local state
+      // 5. Refresh site inventory to show updated materials at site
+      if (refreshSiteInventory) {
+        await refreshSiteInventory();
+      }
+
+      // 6. Update local state
       setWaybills(prev => prev.map(wb => wb.id === waybill.id ? { ...wb, status: 'sent_to_site' } : wb));
       setAssets(prev => prev.map(asset => {
         const updated = updatedAssets.find(u => u.id === asset.id);
@@ -331,7 +346,7 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
 
     // Process returns - add quantity back to main inventory ONLY for good items
     // Damaged and missing items are tracked via site_transactions only
-    returnData.items.forEach(returnItem => {
+    for (const returnItem of returnData.items) {
       if (returnItem.condition === 'good') {
         // Add good items back to main inventory
         setAssets(prev => prev.map(asset => {
@@ -341,8 +356,23 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
           return asset;
         }));
       }
-      // Damaged and missing are only tracked in site_transactions with condition field
-    });
+      
+      // Update site inventory - reduce quantity for ALL returned items (good, damaged, missing)
+      if (siteId) {
+        try {
+          await api.upsertSiteInventory({
+            site_id: siteId,
+            item_id: returnItem.assetId,
+            item_name: returnItem.assetName,
+            quantity: -returnItem.quantity, // Negative to reduce quantity
+            unit: returnItem.unit,
+            category: returnItem.category
+          });
+        } catch (error) {
+          console.error('Failed to update site inventory:', error);
+        }
+      }
+    }
 
     const originalWaybill = waybills.find(wb => wb.id === returnData.waybillId && wb.type === 'waybill');
     const returnTransactions: SiteTransaction[] = returnData.items.map(returnItem => ({
@@ -351,32 +381,26 @@ export const useWaybills = (assets: any[], sites: any[], setAssets: React.Dispat
       assetId: returnItem.assetId,
       assetName: returnItem.assetName,
       quantity: returnItem.quantity,
-      type: 'in' as const,
-      transactionType: 'return' as const,
-      referenceId: originalWaybill?.id || returnData.waybillId,
-      referenceType: 'return_waybill' as const,
+      type: 'in',
+      transactionType: 'return',
+      referenceId: returnData.waybillId,
+      referenceType: 'waybill',
       condition: returnItem.condition,
-      notes: `Return processed: ${returnItem.condition}`,
+      notes: `Material returned from site - Condition: ${returnItem.condition}`,
       createdAt: new Date(),
-      createdBy: waybill?.driverName
+      createdBy: originalWaybill?.driverName || 'Unknown'
     }));
 
-    const recentTime = Date.now() - 5000;
-    const filteredTransactions = returnTransactions.filter(newTrans => {
-      return !siteTransactions.some(existing =>
-        existing.assetId === newTrans.assetId &&
-        existing.quantity === newTrans.quantity &&
-        existing.referenceId === newTrans.referenceId &&
-        existing.type === newTrans.type &&
-        new Date(existing.createdAt).getTime() > recentTime
-      );
-    });
-
-    await Promise.all(filteredTransactions.map(handleAddSiteTransaction));
+    await Promise.all(returnTransactions.map(handleAddSiteTransaction));
+    
+    // Refresh site inventory after processing return
+    if (refreshSiteInventory) {
+      await refreshSiteInventory();
+    }
 
     toast({
       title: "Return Processed",
-      description: `Return processed successfully for waybill ${returnData.waybillId}`
+      description: `Items returned successfully. Good items added back to main inventory.`
     });
   };
 

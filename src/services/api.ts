@@ -23,7 +23,7 @@ export interface ItemDB {
 }
 
 // Frontend types (from asset.ts)
-import type { Asset, Site as SiteFE, Employee as EmployeeFE, Waybill as WaybillFE, QuickCheckout as QuickCheckoutFE, ReturnBill, SiteTransaction as SiteTransactionFE, Activity as ActivityFE, ReturnItem } from '@/types/asset';
+import type { Asset, Site as SiteFE, Employee as EmployeeFE, Waybill as WaybillFE, QuickCheckout as QuickCheckoutFE, ReturnBill as ReturnBillFE, SiteTransaction as SiteTransactionFE, Activity as ActivityFE, ReturnItem } from '@/types/asset';
 
 // Re-export types for backward compatibility
 export type Item = Asset;
@@ -33,6 +33,7 @@ export type Waybill = WaybillFE;
 export type QuickCheckout = QuickCheckoutFE;
 export type SiteTransaction = SiteTransactionFE;
 export type Activity = ActivityFE;
+export type ReturnBill = ReturnBillFE;
 export type { ReturnItem, Asset };
 
 export interface SiteDB {
@@ -137,7 +138,7 @@ export interface ReturnBillItem {
   condition?: string;
 }
 
-export interface ReturnBill {
+export interface ReturnBillDB {
   id: string;
   waybill_id?: string;
   return_date?: string;
@@ -145,7 +146,7 @@ export interface ReturnBill {
   condition?: string;
   notes?: string;
   status?: string;
-  items: ReturnBillItem[];
+  items: any;
   created_at: string;
 }
 
@@ -338,15 +339,22 @@ export const api = {
 
   async createItem(item: Partial<Asset>): Promise<Asset> {
     const id = `item_${Date.now()}`;
-    const dbItem = assetToDbItem(item);
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('items')
       .insert({
         id,
-        ...dbItem,
-        quantity: dbItem.quantity ?? 0,
-        low_stock_level: dbItem.low_stock_level ?? 0,
-        critical_stock_level: dbItem.critical_stock_level ?? 0,
+        name: item.name,
+        unit: item.unit || item.unitOfMeasurement,
+        category: item.category,
+        type: item.type,
+        location: item.location,
+        description: item.description,
+        status: item.status,
+        condition: item.condition,
+        site_id: item.siteId || item.site_id,
+        checkout_type: item.checkoutType || item.checkout_type,
+        low_stock_level: item.lowStockLevel || item.low_stock_level || 0,
+        critical_stock_level: item.criticalStockLevel || item.critical_stock_level || 0,
       })
       .select()
       .single();
@@ -390,8 +398,28 @@ export const api = {
     // Delete all existing items
     await supabase.from('items').delete().neq('id', '');
 
-    // Convert and insert all items
-    const dbItems = items.map(item => assetToDbItem(item));
+    // Convert and insert all items with proper structure
+    const dbItems = items.map(item => {
+      const dbItem = assetToDbItem(item);
+      return {
+        id: item.id,
+        name: dbItem.name || item.name,
+        quantity: dbItem.quantity ?? item.quantity ?? 0,
+        total_stock: dbItem.total_stock ?? item.total_stock ?? 0,
+        reserved: dbItem.reserved ?? item.reserved ?? 0,
+        unit: dbItem.unit,
+        category: dbItem.category,
+        type: dbItem.type,
+        location: dbItem.location,
+        description: dbItem.description,
+        status: dbItem.status,
+        condition: dbItem.condition,
+        site_id: dbItem.site_id,
+        checkout_type: dbItem.checkout_type,
+        low_stock_level: dbItem.low_stock_level ?? 0,
+        critical_stock_level: dbItem.critical_stock_level ?? 0,
+      };
+    });
     const { error } = await supabase
       .from('items')
       .insert(dbItems);
@@ -812,26 +840,37 @@ export const api = {
     if (error) throw new Error('Failed to delete quick checkout');
   },
 
-  async getReturnBills(): Promise<ReturnBill[]> {
+  async getReturnBills(): Promise<ReturnBillFE[]> {
     const { data, error } = await supabase
       .from('return_bills')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch return bills');
-    return (data || []).map(rb => ({
-      ...rb,
+    return (data || []).map((rb: ReturnBillDB) => ({
+      id: rb.id,
+      waybillId: rb.waybill_id,
+      returnDate: rb.return_date ? new Date(rb.return_date) : undefined,
+      receivedBy: rb.received_by,
+      condition: rb.condition as any,
+      notes: rb.notes,
+      status: rb.status as any,
       items: typeof rb.items === 'string' ? JSON.parse(rb.items) : rb.items
     }));
   },
 
-  async createReturnBill(returnBill: Omit<ReturnBill, 'id' | 'created_at'>): Promise<ReturnBill> {
+  async createReturnBill(returnBill: Omit<ReturnBillFE, 'id'>): Promise<ReturnBillFE> {
     const id = `rb_${Date.now()}`;
     const { data, error } = await supabase
       .from('return_bills')
       .insert({
-        ...returnBill,
         id,
+        waybill_id: returnBill.waybillId,
+        return_date: returnBill.returnDate?.toISOString(),
+        received_by: returnBill.receivedBy,
+        condition: returnBill.condition,
+        notes: returnBill.notes,
+        status: returnBill.status,
         items: returnBill.items as any
       })
       .select()
@@ -839,7 +878,13 @@ export const api = {
 
     if (error) throw new Error('Failed to create return bill');
     return {
-      ...data,
+      id: data.id,
+      waybillId: data.waybill_id,
+      returnDate: data.return_date ? new Date(data.return_date) : undefined,
+      receivedBy: data.received_by,
+      condition: data.condition as any,
+      notes: data.notes,
+      status: data.status as any,
       items: typeof data.items === 'string' ? JSON.parse(data.items) : data.items
     };
   },

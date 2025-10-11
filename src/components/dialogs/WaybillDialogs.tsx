@@ -5,6 +5,7 @@ import { ReturnWaybillDocument } from "@/components/waybills/ReturnWaybillDocume
 import { ReturnProcessingDialog } from "@/components/waybills/ReturnProcessingDialog";
 import { ReturnWaybillForm } from "@/components/waybills/ReturnWaybillForm";
 import { EditWaybillForm } from "@/components/waybills/EditWaybillForm";
+import { Waybill } from "@/types/asset";
 
 interface WaybillDialogsProps {
   showWaybillDocument: any;
@@ -26,7 +27,7 @@ interface WaybillDialogsProps {
   employees: any[];
   vehicles: any[];
   handleProcessReturn: (returnData: any) => Promise<void>;
-  handleCreateReturnWaybill: (waybillData: any) => Promise<void>;
+  handleCreateReturnWaybill: (waybillData: any) => Promise<Waybill | undefined>;
   handleUpdateReturnWaybill: (waybillData: any) => Promise<void>;
   handleUpdateWaybill: (waybillData: any) => Promise<void>;
 }

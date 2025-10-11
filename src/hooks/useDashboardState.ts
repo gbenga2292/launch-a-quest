@@ -380,65 +380,40 @@ export const useDashboardState = () => {
     }
   };
 
-  const handleResetAllData = (categories?: string[]) => {
-    if (!categories || categories.length === 0) {
+  const handleResetAllData = async (): Promise<void> => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to reset data",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await api.resetDatabase();
+      
+      // Clear all local state
       setAssets([]);
+      setSites([]);
       setEmployees([]);
       setVehicles([]);
       setWaybills([]);
       setQuickCheckouts([]);
-      setSites([]);
       setSiteTransactions([]);
-      setCompanySettings({} as CompanySettingsType);
+
       toast({
         title: "Data Reset",
         description: "All data has been reset successfully.",
         variant: "default"
       });
-      return;
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reset data",
+        variant: "destructive"
+      });
     }
-
-    const resetCategories = categories || [];
-    let resetCount = 0;
-
-    if (resetCategories.includes('assets')) {
-      setAssets([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('sites')) {
-      setSites([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('employees')) {
-      setEmployees([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('vehicles')) {
-      setVehicles([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('company-settings')) {
-      setCompanySettings({} as CompanySettingsType);
-      resetCount++;
-    }
-    if (resetCategories.includes('waybills')) {
-      setWaybills([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('quick-checkouts')) {
-      setQuickCheckouts([]);
-      resetCount++;
-    }
-    if (resetCategories.includes('site-transactions')) {
-      setSiteTransactions([]);
-      resetCount++;
-    }
-
-    toast({
-      title: "Data Reset",
-      description: `${resetCount} data categories have been reset successfully.`,
-      variant: "default"
-    });
   };
 
   const handleReconcileSiteMaterials = async (siteId: string) => {
@@ -480,7 +455,7 @@ export const useDashboardState = () => {
 
 
 
-  const handleDeleteQuickCheckout = (checkoutId: string) => {
+  const handleDeleteQuickCheckout = async (checkoutId: string): Promise<void> => {
     if (!isAuthenticated) {
       toast({
         title: "Authentication Required",
@@ -490,13 +465,23 @@ export const useDashboardState = () => {
       return;
     }
 
-    setQuickCheckouts(prev => prev.filter(checkout => checkout.id !== checkoutId));
+    try {
+      await api.deleteQuickCheckout(checkoutId);
+      setQuickCheckouts(prev => prev.filter(checkout => checkout.id !== checkoutId));
 
-    toast({
-      title: "Checkout Deleted",
-      description: "The checkout has been successfully deleted."
-    });
+      toast({
+        title: "Checkout Deleted",
+        description: "The checkout has been successfully deleted."
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete checkout",
+        variant: "destructive"
+      });
+    }
   };
+
 
   return {
     // State

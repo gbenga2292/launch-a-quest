@@ -1,4 +1,5 @@
-import { Item as Asset, Waybill, WaybillItem, QuickCheckout, Site, SiteTransaction, CompanySettings, Employee, ReturnItem } from "@/services/api";
+import { Item as Asset, Waybill, QuickCheckout, Site, SiteTransaction, CompanySettings, Employee, ReturnItem } from "@/services/api";
+import { WaybillItem } from "@/types/asset";
 import { DashboardTab } from "@/components/tabs/DashboardTab";
 import { AssetsTab } from "@/components/tabs/AssetsTab";
 import { CreateWaybillTab } from "@/components/tabs/CreateWaybillTab";
@@ -42,7 +43,7 @@ interface TabContentProps {
   handleOpenReturnDialog: (returnData: { waybillId: string; items: any[] }) => void;
   handleQuickCheckout: (checkoutData: Omit<QuickCheckout, 'id'>) => Promise<void>;
   handleReturnItem: (checkoutId: string) => Promise<void>;
-  handleCreateReturnWaybill: (waybillData: { siteId: string; returnToSiteId?: string; items: WaybillItem[]; driverName: string; vehicle: string; purpose: string; expectedReturnDate?: Date; }) => Promise<Waybill | undefined>;
+  handleCreateReturnWaybill: (waybillData: { siteId: string; returnToSiteId?: string; items: WaybillItem[]; driverName: string; vehicle: string; purpose: string; service: string; expectedReturnDate?: Date; }) => Promise<Waybill | undefined>;
   handleDeleteQuickCheckout: (checkoutId: string) => Promise<void>;
   handleReconcileSiteMaterials: (siteId: string) => Promise<void>;
   getSiteInventory: (siteId: string) => SiteInventoryItem[];

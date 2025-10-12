@@ -289,6 +289,10 @@ export const useWaybills = (
 
       if (updatedAssets.length > 0) {
         await handleUpdateAssets(updatedAssets);
+        setAssets(prev => prev.map(asset => {
+          const updated = updatedAssets.find(u => u.id === asset.id);
+          return updated || asset;
+        }));
       }
 
       // 3. Update/create site inventory records

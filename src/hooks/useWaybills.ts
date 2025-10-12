@@ -164,11 +164,34 @@ export const useWaybills = (
 
       const createdWaybill = await api.createWaybill(apiWaybillData);
       const newWaybill = apiWaybillToWaybill(createdWaybill);
+      
+      // Reserve items: reduce quantity (available) and increase reserved
+      const updatedAssets: Asset[] = [];
+      waybillData.items?.forEach(item => {
+        const mainAsset = assets.find(a => a.id === item.assetId && !a.siteId);
+        if (mainAsset) {
+          updatedAssets.push({
+            ...mainAsset,
+            quantity: mainAsset.quantity - item.quantity,
+            reserved: (mainAsset.reserved || 0) + item.quantity,
+            updatedAt: new Date()
+          });
+        }
+      });
+
+      if (updatedAssets.length > 0) {
+        await handleUpdateAssets(updatedAssets);
+        setAssets(prev => prev.map(asset => {
+          const updated = updatedAssets.find(u => u.id === asset.id);
+          return updated || asset;
+        }));
+      }
+
       setWaybills(prev => [...prev, newWaybill]);
 
       toast({
         title: "Waybill Created",
-        description: `Waybill ${newWaybill.id} created successfully`
+        description: `Waybill ${newWaybill.id} created and items reserved`
       });
       return newWaybill;
     } catch (error) {
@@ -201,16 +224,29 @@ export const useWaybills = (
           return;
         }
       } else {
-        // For regular waybills that were sent to site, return items to main inventory
-        if (waybill.status === 'sent_to_site') {
+        // For draft/outstanding waybills, unreserve items
+        if (waybill.status === 'outstanding') {
+          const updatedAssets: Asset[] = [];
           waybill.items.forEach(item => {
-            setAssets(prev => prev.map(asset =>
-              asset.id === item.assetId && !asset.siteId
-                ? { ...asset, quantity: asset.quantity + item.quantity, updatedAt: new Date() }
-                : asset
-            ));
+            const mainAsset = assets.find(a => a.id === item.assetId && !a.siteId);
+            if (mainAsset) {
+              updatedAssets.push({
+                ...mainAsset,
+                quantity: mainAsset.quantity + item.quantity,
+                reserved: (mainAsset.reserved || 0) - item.quantity,
+                updatedAt: new Date()
+              });
+            }
           });
+          if (updatedAssets.length > 0) {
+            await handleUpdateAssets(updatedAssets);
+            setAssets(prev => prev.map(asset => {
+              const updated = updatedAssets.find(u => u.id === asset.id);
+              return updated || asset;
+            }));
+          }
         }
+        // For waybills sent to site, items are already at site - no inventory adjustment needed
       }
       await api.deleteWaybill(waybill.id);
       setWaybills(prev => prev.filter(wb => wb.id !== waybill.id));
@@ -238,14 +274,14 @@ export const useWaybills = (
       // 1. Update waybill status in database
       await api.sendToSite(waybill.id, siteId);
 
-      // 2. Update main inventory in database (persist changes)
+      // 2. Unreserve items in main inventory (items now at site, no longer reserved)
       const updatedAssets: Asset[] = [];
       waybill.items.forEach(item => {
         const mainAsset = assets.find(a => a.id === item.assetId && !a.siteId);
         if (mainAsset) {
           updatedAssets.push({
             ...mainAsset,
-            quantity: mainAsset.quantity - item.quantity,
+            reserved: (mainAsset.reserved || 0) - item.quantity,
             updatedAt: new Date()
           });
         }

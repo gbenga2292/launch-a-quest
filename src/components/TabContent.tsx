@@ -32,6 +32,7 @@ interface TabContentProps {
   setActiveTab: (tab: string) => void;
   setSelectedSite: (site: Site | null) => void;
   setShowReturnForm: (waybill: Waybill | null) => void;
+  setEditingAsset: (asset: any) => void;
   handleEditAsset: (asset: Asset) => void;
   handleDeleteAsset: (asset: Asset) => void;
   handleCreateWaybill: (waybillData: Partial<Waybill>) => Promise<Waybill | undefined>;
@@ -47,6 +48,7 @@ interface TabContentProps {
   handleDeleteQuickCheckout: (checkoutId: string) => Promise<void>;
   handleReconcileSiteMaterials: (siteId: string) => Promise<void>;
   getSiteInventory: (siteId: string) => SiteInventoryItem[];
+  handleImport: (assets: any[]) => Promise<void>;
   handleAddSite: (siteData: Omit<Site, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   handleSaveSite: (site: Site) => Promise<void>;
   confirmDeleteSite: (siteId: string) => Promise<void>;
@@ -81,6 +83,7 @@ export const TabContent = ({
   setActiveTab,
   setSelectedSite,
   setShowReturnForm,
+  setEditingAsset,
   handleEditAsset,
   handleDeleteAsset,
   handleCreateWaybill,
@@ -96,6 +99,7 @@ export const TabContent = ({
   handleDeleteQuickCheckout,
   handleReconcileSiteMaterials,
   getSiteInventory,
+  handleImport,
   handleAddSite,
   handleSaveSite,
   confirmDeleteSite,
@@ -127,6 +131,9 @@ export const TabContent = ({
           quickCheckouts={quickCheckouts}
           siteTransactions={siteTransactions}
           sites={sites}
+          companySettings={companySettings}
+          handleImport={handleImport}
+          setEditingAsset={setEditingAsset}
         />
       );
     case "create-waybill":

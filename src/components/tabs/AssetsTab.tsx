@@ -1,4 +1,5 @@
 import { AssetTable } from "@/components/assets/AssetTable";
+import { AssetInventoryHeader } from "@/components/assets/AssetInventoryHeader";
 import { Asset, Waybill, QuickCheckout, SiteTransaction, Site } from "@/types/asset";
 
 interface AssetsTabProps {
@@ -12,6 +13,9 @@ interface AssetsTabProps {
   quickCheckouts: QuickCheckout[];
   siteTransactions: SiteTransaction[];
   sites: Site[];
+  companySettings?: any;
+  handleImport?: (assets: any[]) => Promise<void>;
+  setEditingAsset?: (asset: any) => void;
 }
 
 export const AssetsTab = ({
@@ -24,22 +28,33 @@ export const AssetsTab = ({
   waybills,
   quickCheckouts,
   siteTransactions,
-  sites
+  sites,
+  companySettings = {},
+  handleImport = async () => {},
+  setEditingAsset = () => {}
 }: AssetsTabProps) => {
   const handleUpdateAsset = (asset: Asset) => {
     setAssets(prev => prev.map(a => a.id === asset.id ? asset : a));
   };
 
   return (
-    <AssetTable
-      assets={assets}
-      onEdit={handleEditAsset}
-      onDelete={handleDeleteAsset}
-      onUpdateAsset={handleUpdateAsset}
-      waybills={waybills}
-      quickCheckouts={quickCheckouts}
-      siteTransactions={siteTransactions}
-      sites={sites}
-    />
+    <div className="space-y-6">
+      <AssetInventoryHeader
+        assets={assets}
+        companySettings={companySettings}
+        handleImport={handleImport}
+        setEditingAsset={setEditingAsset}
+      />
+      <AssetTable
+        assets={assets}
+        onEdit={handleEditAsset}
+        onDelete={handleDeleteAsset}
+        onUpdateAsset={handleUpdateAsset}
+        waybills={waybills}
+        quickCheckouts={quickCheckouts}
+        siteTransactions={siteTransactions}
+        sites={sites}
+      />
+    </div>
   );
 };

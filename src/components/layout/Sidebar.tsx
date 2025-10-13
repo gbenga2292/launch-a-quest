@@ -31,6 +31,11 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
       icon: LayoutDashboard
     },
     {
+      id: "assets",
+      label: "Asset Inventory",
+      icon: Package
+    },
+    {
       id: "waybills",
       label: "Waybills",
       icon: FileText
@@ -39,11 +44,6 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
       id: "returns",
       label: "Returns",
       icon: FileText
-    },
-    {
-      id: "assets",
-      label: "Asset Inventory",
-      icon: Package
     },
     {
       id: "quick-checkout",

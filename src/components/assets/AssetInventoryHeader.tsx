@@ -44,13 +44,13 @@ export const AssetInventoryHeader = ({
   return (
     <TooltipProvider>
       <div className="flex flex-col space-y-3 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
-        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+        <div className="flex gap-3 md:gap-4 w-full">
           <Tooltip>
             <TooltipTrigger asChild>
-              <div>
+              <div className="flex-1">
                 <Button
                   variant="outline"
-                  className={`gap-2 ${!canImportAssets ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`gap-2 w-full ${!canImportAssets ? 'opacity-50 cursor-not-allowed' : ''}`}
                   onClick={handleImportClick}
                   disabled={!canImportAssets}
                 >
@@ -67,15 +67,15 @@ export const AssetInventoryHeader = ({
               </TooltipContent>
             )}
           </Tooltip>
-          <InventoryReport assets={assets} companySettings={companySettings} />
-        </div>
-        <div className="flex justify-end">
+          <div className="flex-1">
+            <InventoryReport assets={assets} companySettings={companySettings} />
+          </div>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div>
+              <div className="flex-1">
                 <Button
                   onClick={handleAddAsset}
-                  className={`bg-gradient-primary text-white hover:bg-gradient-primary/90 ${!canEditAssets ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`bg-gradient-primary text-white hover:bg-gradient-primary/90 w-full ${!canEditAssets ? 'opacity-50 cursor-not-allowed' : ''}`}
                   disabled={!canEditAssets}
                 >
                   Add Asset

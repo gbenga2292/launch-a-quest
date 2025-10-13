@@ -11,9 +11,10 @@ import autoTable from "jspdf-autotable";
 interface InventoryReportProps {
   assets: Asset[];
   companySettings?: CompanySettings;
+  className?: string;
 }
 
-export const InventoryReport = ({ assets, companySettings }: InventoryReportProps) => {
+export const InventoryReport = ({ assets, companySettings, className }: InventoryReportProps) => {
   const [loading, setLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState("all");
@@ -85,7 +86,7 @@ export const InventoryReport = ({ assets, companySettings }: InventoryReportProp
 
   return (
     <>
-      <Button variant="outline" className="gap-2" onClick={() => setIsDialogOpen(true)} disabled={loading}>
+      <Button variant="outline" className={`gap-2 w-full ${className || ''}`} onClick={() => setIsDialogOpen(true)} disabled={loading}>
         <FileText className="h-4 w-4" />
         Export Report
       </Button>

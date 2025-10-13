@@ -5,7 +5,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { TabContent } from "@/components/TabContent";
 import { AssetDialogs } from "@/components/dialogs/AssetDialogs";
 import { WaybillDialogs } from "@/components/dialogs/WaybillDialogs";
-import { AssetInventoryHeader } from "@/components/assets/AssetInventoryHeader";
+
 
 const Index = () => {
   const { isAuthenticated } = useAuth();
@@ -128,6 +128,7 @@ const Index = () => {
         setActiveTab={setActiveTab}
         setSelectedSite={setSelectedSite as any}
         setShowReturnForm={setShowReturnForm as any}
+        setEditingAsset={setEditingAsset}
         handleEditAsset={handleEditAsset as any}
         handleDeleteAsset={handleDeleteAsset as any}
         handleCreateWaybill={handleCreateWaybill}
@@ -143,6 +144,7 @@ const Index = () => {
         handleDeleteQuickCheckout={handleDeleteQuickCheckout}
         handleReconcileSiteMaterials={handleReconcileSiteMaterials}
         getSiteInventory={getSiteInventory}
+        handleImport={handleImport}
         handleAddSite={handleAddSite}
         handleSaveSite={handleSaveSite as any}
         confirmDeleteSite={confirmDeleteSite}
@@ -159,15 +161,7 @@ const Index = () => {
         handleResetAllData={handleResetAllData}
       />
 
-      {/* Asset Inventory Tab Header */}
-      {activeTab === "assets" && (
-        <AssetInventoryHeader
-          assets={assets}
-          companySettings={companySettings}
-          handleImport={handleImport}
-          setEditingAsset={setEditingAsset}
-        />
-      )}
+
 
       {/* Asset Dialogs */}
       <AssetDialogs

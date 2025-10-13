@@ -3,15 +3,13 @@ export interface Asset {
   name: string;
   description?: string;
   quantity: number;
-  total_stock: number;  // Total stock in database
-  reserved: number;  // Reserved/checked out stock
+  total_stock: number;  // Total stock purchased (only changes on new purchases)
+  reserved: number;  // Reserved/checked out stock (in waybills)
   unit: string;  // Unit of measurement (database field)
   unitOfMeasurement: string;  // Alias for unit
   category: 'Dewatering' | 'Waterproofing';
   type: 'consumable' | 'non-consumable' | 'tools' | 'equipment';
   location?: string;
-  siteId?: string; // Link asset to a specific site
-  site_id?: string;  // Database field alias
   checkoutType?: 'waybill' | 'quick_checkout' | 'reconciled'; // Added to demarcate checkout type
   checkout_type?: string;  // Database field alias
   service?: string; // Service classification for sorting

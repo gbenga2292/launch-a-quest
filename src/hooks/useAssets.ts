@@ -10,16 +10,14 @@ const transformApiAsset = (apiAsset: ApiAsset): Asset => ({
   id: apiAsset.id,
   name: apiAsset.name,
   description: apiAsset.description,
-  quantity: apiAsset.quantity || apiAsset.total_stock || 0,
-  total_stock: apiAsset.total_stock || apiAsset.quantity || 0,
+  quantity: apiAsset.quantity || 0,
+  total_stock: apiAsset.total_stock || 0,
   reserved: apiAsset.reserved || 0,
   unit: apiAsset.unit || apiAsset.unitOfMeasurement || 'pcs',
   unitOfMeasurement: apiAsset.unitOfMeasurement || apiAsset.unit || 'pcs',
   category: apiAsset.category as 'Dewatering' | 'Waterproofing',
   type: apiAsset.type as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
   location: apiAsset.location,
-  siteId: apiAsset.siteId,
-  site_id: apiAsset.site_id,
   checkoutType: apiAsset.checkoutType as 'waybill' | 'quick_checkout' | 'reconciled',
   checkout_type: apiAsset.checkout_type,
   service: '', // Not available in API
@@ -79,16 +77,17 @@ export const useAssets = () => {
     }
     try {
       // Convert local Asset format to API format
+      const initialStock = assetData.total_stock || assetData.quantity || 0;
       const apiAssetData = {
         name: assetData.name,
         description: assetData.description,
-        total_stock: assetData.total_stock || assetData.quantity || 0,
+        total_stock: initialStock,  // Total purchased
+        quantity: initialStock,  // Available starts at total
         reserved: 0,  // New assets start with 0 reserved
         unit: assetData.unit || assetData.unitOfMeasurement || 'pcs',
         category: assetData.category,
         type: assetData.type,
         location: assetData.location,
-        site_id: assetData.siteId || assetData.site_id,
         checkout_type: assetData.checkoutType || assetData.checkout_type,
         status: assetData.status,
         condition: assetData.condition,
@@ -124,16 +123,16 @@ export const useAssets = () => {
     try {
       console.log('Updating asset:', updatedAsset.id, 'with data:', updatedAsset);
       // Convert local Asset format to API format
+      // NOTE: total_stock is NOT included here - it only changes on new purchases
       const apiAssetData = {
         name: updatedAsset.name,
         description: updatedAsset.description,
-        total_stock: updatedAsset.total_stock || updatedAsset.quantity || 0,
+        quantity: updatedAsset.quantity,
         reserved: updatedAsset.reserved || 0,
         unit: updatedAsset.unit || updatedAsset.unitOfMeasurement || 'pcs',
         category: updatedAsset.category,
         type: updatedAsset.type,
         location: updatedAsset.location,
-        site_id: updatedAsset.siteId || updatedAsset.site_id,
         checkout_type: updatedAsset.checkoutType || updatedAsset.checkout_type,
         status: updatedAsset.status,
         condition: updatedAsset.condition,
@@ -171,16 +170,16 @@ export const useAssets = () => {
     }
     try {
       // Convert local Assets to API format
+      // NOTE: total_stock is NOT included - it only changes on new purchases
       const apiAssets = updatedAssets.map(asset => ({
         name: asset.name,
         description: asset.description,
-        total_stock: asset.total_stock || asset.quantity || 0,
+        quantity: asset.quantity,
         reserved: asset.reserved || 0,
         unit: asset.unit || asset.unitOfMeasurement || 'pcs',
         category: asset.category,
         type: asset.type,
         location: asset.location,
-        site_id: asset.siteId || asset.site_id,
         checkout_type: asset.checkoutType || asset.checkout_type,
         status: asset.status,
         condition: asset.condition,
@@ -246,10 +245,12 @@ export const useAssets = () => {
     try {
       const newAssets: Asset[] = [];
       for (const item of importedAssets) {
+        const initialStock = item.quantity || 0;
         const assetData = {
           name: item.name,
           description: item.description || '',
-          total_stock: item.quantity || 0,
+          total_stock: initialStock,  // Total purchased
+          quantity: initialStock,  // Available starts at total
           reserved: 0,
           unit: item.unitOfMeasurement || 'pcs',
           category: item.category,

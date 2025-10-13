@@ -14,7 +14,6 @@ export interface ItemDB {
   type?: string | null;
   status?: string | null;
   condition?: string | null;
-  site_id?: string | null;
   checkout_type?: string | null;
   low_stock_level?: number | null;
   critical_stock_level?: number | null;
@@ -194,16 +193,14 @@ const dbItemToAsset = (item: ItemDB): Asset => ({
   id: item.id,
   name: item.name,
   description: item.description || undefined,
-  quantity: item.quantity || item.total_stock || 0,
-  total_stock: item.total_stock || item.quantity || 0,
+  quantity: item.quantity || 0,
+  total_stock: item.total_stock || 0,
   reserved: item.reserved || 0,
   unit: item.unit || 'pcs',
   unitOfMeasurement: item.unit || 'pcs',
   category: (item.category as any) || 'Dewatering',
   type: (item.type as any) || 'equipment',
   location: item.location,
-  siteId: item.site_id,
-  site_id: item.site_id,
   checkoutType: item.checkout_type as any,
   checkout_type: item.checkout_type,
   status: (item.status as any) || 'active',
@@ -218,23 +215,30 @@ const dbItemToAsset = (item: ItemDB): Asset => ({
   updated_at: item.updated_at || new Date().toISOString(),
 });
 
-const assetToDbItem = (asset: Partial<Asset>): Partial<ItemDB> => ({
-  name: asset.name,
-  description: asset.description,
-  quantity: asset.quantity || asset.total_stock,
-  total_stock: asset.total_stock || asset.quantity,
-  reserved: asset.reserved,
-  unit: asset.unit || asset.unitOfMeasurement,
-  category: asset.category,
-  type: asset.type,
-  location: asset.location,
-  site_id: asset.siteId || asset.site_id,
-  checkout_type: asset.checkoutType || asset.checkout_type,
-  status: asset.status,
-  condition: asset.condition,
-  low_stock_level: asset.lowStockLevel || asset.low_stock_level,
-  critical_stock_level: asset.criticalStockLevel || asset.critical_stock_level,
-});
+const assetToDbItem = (asset: Partial<Asset>, isUpdate: boolean = true): Partial<ItemDB> => {
+  const dbItem: Partial<ItemDB> = {
+    name: asset.name,
+    description: asset.description,
+    quantity: asset.quantity,
+    reserved: asset.reserved,
+    unit: asset.unit || asset.unitOfMeasurement,
+    category: asset.category,
+    type: asset.type,
+    location: asset.location,
+    checkout_type: asset.checkoutType || asset.checkout_type,
+    status: asset.status,
+    condition: asset.condition,
+    low_stock_level: asset.lowStockLevel || asset.low_stock_level,
+    critical_stock_level: asset.criticalStockLevel || asset.critical_stock_level,
+  };
+  
+  // Only include total_stock for creates or explicit total_stock updates (purchasing)
+  if (!isUpdate && asset.total_stock !== undefined) {
+    dbItem.total_stock = asset.total_stock;
+  }
+  
+  return dbItem;
+};
 
 const dbSiteToSite = (site: SiteDB): SiteFE => ({
   id: site.id,
@@ -339,11 +343,16 @@ export const api = {
 
   async createItem(item: Partial<Asset>): Promise<Asset> {
     const id = `item_${Date.now()}`;
+    const initialStock = item.total_stock || item.quantity || 0;
+    
     const { data, error} = await supabase
       .from('items')
       .insert({
         id,
         name: item.name,
+        quantity: initialStock,  // Available stock starts at initial purchase
+        total_stock: initialStock,  // Total purchased
+        reserved: 0,  // Nothing reserved initially
         unit: item.unit || item.unitOfMeasurement,
         category: item.category,
         type: item.type,
@@ -351,7 +360,6 @@ export const api = {
         description: item.description,
         status: item.status,
         condition: item.condition,
-        site_id: item.siteId || item.site_id,
         checkout_type: item.checkoutType || item.checkout_type,
         low_stock_level: item.lowStockLevel || item.low_stock_level || 0,
         critical_stock_level: item.criticalStockLevel || item.critical_stock_level || 0,
@@ -364,7 +372,8 @@ export const api = {
   },
 
   async updateItem(id: string, item: Partial<Asset>): Promise<Asset> {
-    const dbItem = assetToDbItem(item);
+    // Use isUpdate=true to prevent total_stock from being modified in regular updates
+    const dbItem = assetToDbItem(item, true);
     const { data, error } = await supabase
       .from('items')
       .update(dbItem)
@@ -414,7 +423,6 @@ export const api = {
         description: dbItem.description,
         status: dbItem.status,
         condition: dbItem.condition,
-        site_id: dbItem.site_id,
         checkout_type: dbItem.checkout_type,
         low_stock_level: dbItem.low_stock_level ?? 0,
         critical_stock_level: dbItem.critical_stock_level ?? 0,

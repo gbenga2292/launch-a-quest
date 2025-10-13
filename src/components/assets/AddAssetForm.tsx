@@ -28,7 +28,6 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
     category: (asset?.category || 'Dewatering') as 'Dewatering' | 'Waterproofing',
     type: (asset?.type || 'equipment') as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
     location: asset?.location || '',
-    siteId: asset?.siteId || asset?.site_id || '',
     lowStockLevel: asset?.lowStockLevel || asset?.low_stock_level || 0,
     criticalStockLevel: asset?.criticalStockLevel || asset?.critical_stock_level || 0
   });
@@ -74,7 +73,6 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
         category: 'Dewatering',
         type: 'equipment',
         location: '',
-        siteId: '',
         lowStockLevel: 0,
         criticalStockLevel: 0
       });

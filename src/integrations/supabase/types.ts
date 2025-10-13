@@ -175,7 +175,6 @@ export type Database = {
           name: string
           quantity: number | null
           reserved: number | null
-          site_id: string | null
           status: string | null
           total_stock: number | null
           type: string | null
@@ -195,7 +194,6 @@ export type Database = {
           name: string
           quantity?: number | null
           reserved?: number | null
-          site_id?: string | null
           status?: string | null
           total_stock?: number | null
           type?: string | null
@@ -215,7 +213,6 @@ export type Database = {
           name?: string
           quantity?: number | null
           reserved?: number | null
-          site_id?: string | null
           status?: string | null
           total_stock?: number | null
           type?: string | null

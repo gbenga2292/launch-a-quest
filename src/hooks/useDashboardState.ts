@@ -27,8 +27,6 @@ const transformApiAsset = (apiAsset: ApiAsset): Asset => ({
   category: apiAsset.category as 'Dewatering' | 'Waterproofing',
   type: apiAsset.type as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
   location: apiAsset.location,
-  siteId: apiAsset.site_id,
-  site_id: apiAsset.site_id,
   checkoutType: apiAsset.checkout_type as 'waybill' | 'quick_checkout' | 'reconciled',
   checkout_type: apiAsset.checkout_type,
   service: '', // Not available in API

@@ -860,7 +860,14 @@ export const api = {
   },
 
   async createReturnBill(returnBill: Omit<ReturnBillFE, 'id'>): Promise<ReturnBillFE> {
-    const id = `rb_${Date.now()}`;
+    // Get the count of existing return bills to generate sequential ID
+    const { count } = await supabase
+      .from('return_bills')
+      .select('*', { count: 'exact', head: true });
+    
+    const returnNumber = ((count || 0) + 1).toString().padStart(3, '0');
+    const id = `RB${returnNumber}`;
+    
     const { data, error } = await supabase
       .from('return_bills')
       .insert({

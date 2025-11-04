@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { logger } from "@/lib/logger";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +63,7 @@ export const PDFReportGenerator = ({ open, onClose, assets, companySettings }: P
         reportType: reportType as 'all' | 'low-stock' | 'damaged' | 'missing'
       });
     } catch (error) {
-      console.error('Failed to generate PDF report:', error);
+      logger.error('Failed to generate PDF report', error);
     } finally {
       setIsGenerating(false);
     }

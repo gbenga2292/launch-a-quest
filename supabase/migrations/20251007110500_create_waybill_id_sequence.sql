@@ -1,1 +1,0 @@
-CREATE SEQUENCE waybill_id_seq START 1;

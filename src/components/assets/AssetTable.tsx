@@ -18,7 +18,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Item as Asset, Waybill, QuickCheckout, SiteTransaction, Site } from "@/services/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Asset } from "@/types/asset";
 import {
   Search,
   Filter,
@@ -30,59 +37,56 @@ import {
   ChevronDown,
   Check,
   X,
-  TrendingUp
+  FileText,
+  BarChart,
+  History
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { AssetAnalyticsModal } from "./AssetAnalyticsModal";
+import { RestockDialog } from "./RestockDialog";
+import { RestockHistoryDialog } from "./RestockHistoryDialog";
 
 interface AssetTableProps {
   assets: Asset[];
   onEdit: (asset: Asset) => void;
   onDelete: (asset: Asset) => void;
   onUpdateAsset: (asset: Asset) => void;
-  waybills: Waybill[];
-  quickCheckouts: QuickCheckout[];
-  siteTransactions: SiteTransaction[];
-  sites: Site[];
+  onViewAnalytics?: (asset: Asset) => void;
 }
 
-type SortField = 'name' | 'total_stock' | 'reserved' | 'available_stock' | 'location' | 'stockStatus';
+type SortField = 'name' | 'quantity' | 'location' | 'stockStatus';
 
 type SortDirection = 'asc' | 'desc';
 
-export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, quickCheckouts, siteTransactions, sites }: AssetTableProps) => {
+export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, onViewAnalytics }: AssetTableProps) => {
   const isMobile = useIsMobile();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, hasPermission } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<'all' | 'dewatering' | 'waterproofing'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'consumable' | 'non-consumable' | 'tools' | 'equipment'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'damaged' | 'missing' | 'maintenance' | 'out-of-stock' | 'low-stock' | 'in-stock'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingData, setEditingData] = useState<Partial<Asset>>({});
+  const [showRestockDialog, setShowRestockDialog] = useState(false);
+  const [selectedAssetForHistory, setSelectedAssetForHistory] = useState<Asset | null>(null);
+  const [showRestockHistoryDialog, setShowRestockHistoryDialog] = useState(false);
 
-  // New state for analytics modal
-  const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-
-
-
-  const getStockStatus = (asset: Asset): number => {
-    const availableStock = asset.total_stock - asset.reserved;
-    if (availableStock <= 0) return 0; // Out of Stock
-    if (asset.low_stock_level && availableStock < asset.low_stock_level) return 1; // Low Stock
+  const getStockStatus = (quantity: number): number => {
+    if (quantity === 0) return 0; // Out of Stock
+    if (quantity < 10) return 1; // Low Stock
     return 2; // In Stock
   };
 
   const filteredAndSortedAssets = useMemo(() => {
     let filtered = assets.filter(asset => {
+      // Only show office assets (no siteId)
+      if (asset.siteId) return false;
+
       const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           asset.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           asset.location?.toLowerCase().includes(searchTerm.toLowerCase());
-      
+                           asset.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           asset.service?.toLowerCase().includes(searchTerm.toLowerCase());
+
       const matchesCategory = filterCategory === 'all' || asset.category === filterCategory;
       const matchesType = filterType === 'all' || asset.type === filterType;
 
@@ -90,40 +94,37 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
       if (!matchesStatus) {
         if (['active', 'damaged', 'missing', 'maintenance'].includes(filterStatus)) {
           matchesStatus = (asset.status || 'active') === filterStatus;
-        } else {
-            const availableStock = asset.total_stock - asset.reserved;
-            if (filterStatus === 'out-of-stock') {
-                matchesStatus = availableStock <= 0;
-            } else if (filterStatus === 'low-stock') {
-                matchesStatus = availableStock > 0 && asset.low_stock_level != null && availableStock < asset.low_stock_level;
-            } else if (filterStatus === 'in-stock') {
-                matchesStatus = asset.low_stock_level != null && availableStock >= asset.low_stock_level;
-            }
+        } else if (filterStatus === 'out-of-stock') {
+          matchesStatus = asset.quantity === 0;
+        } else if (filterStatus === 'low-stock') {
+          matchesStatus = asset.quantity > 0 && asset.quantity < 10;
+        } else if (filterStatus === 'in-stock') {
+          matchesStatus = asset.quantity >= 10;
         }
       }
-      
+
       return matchesSearch && matchesCategory && matchesType && matchesStatus;
     });
 
     // Sort the filtered assets
     filtered.sort((a, b) => {
-        let aValue: any;
-        let bValue: any;
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
 
-        if (sortField === 'available_stock') {
-            aValue = a.total_stock - a.reserved;
-            bValue = b.total_stock - b.reserved;
-        } else if (sortField === 'stockStatus') {
-            aValue = getStockStatus(a);
-            bValue = getStockStatus(b);
-        } else {
-            aValue = a[sortField as keyof Asset];
-            bValue = b[sortField as keyof Asset];
-        }
+      if (sortField === 'stockStatus') {
+        aValue = getStockStatus(a.quantity);
+        bValue = getStockStatus(b.quantity);
+      }
 
       // Handle undefined/null values
       if (aValue === undefined || aValue === null) aValue = '';
       if (bValue === undefined || bValue === null) bValue = '';
+
+      // Removed special handling for 'updatedAt' since it's not in SortField
+      // if (sortField === 'updatedAt') {
+      //   aValue = a.updatedAt instanceof Date ? a.updatedAt.getTime() : new Date(a.updatedAt).getTime();
+      //   bValue = b.updatedAt instanceof Date ? b.updatedAt.getTime() : new Date(b.updatedAt).getTime();
+      // }
 
       // String comparison for text fields
       if (typeof aValue === 'string' && typeof bValue === 'string') {
@@ -150,28 +151,7 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
     }
   };
 
-  const startEditing = (asset: Asset) => {
-    setEditingId(asset.id);
-    setEditingData({ ...asset });
-  };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditingData({});
-  };
-
-  const saveEditing = () => {
-    if (editingId && editingData) {
-      const updatedAsset = {
-        ...editingData,
-        id: editingId,
-        updated_at: new Date().toISOString()
-      } as Asset;
-      onUpdateAsset(updatedAsset);
-      setEditingId(null);
-      setEditingData({});
-    }
-  };
 
   const getStatusBadge = (status: Asset['status']) => {
     const statusColors = {
@@ -180,7 +160,7 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
       'missing': 'destructive',
       'maintenance': 'secondary'
     };
-    
+
     return (
       <Badge className={statusColors[status || 'active']}>
         {(status || 'active').toUpperCase()}
@@ -188,16 +168,12 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
     );
   };
 
-  const getStockBadge = (asset: Asset) => {
-    const availableStock = asset.total_stock - asset.reserved;
-    const low = asset.low_stock_level ?? 10;
-    const critical = asset.critical_stock_level ?? 5;
-
-    if (availableStock <= 0) {
+  const getStockBadge = (quantity: number, lowStockLevel: number, criticalStockLevel: number) => {
+    if (quantity === 0) {
       return <Badge variant="destructive">Out of Stock</Badge>;
-    } else if (availableStock <= critical) {
-      return <Badge className="bg-red-500 text-white">Critical Stock</Badge>;
-    } else if (availableStock <= low) {
+    } else if (quantity <= criticalStockLevel) {
+      return <Badge variant="destructive">Critical Stock</Badge>;
+    } else if (quantity <= lowStockLevel) {
       return <Badge className="bg-gradient-warning text-warning-foreground">Low Stock</Badge>;
     } else {
       return <Badge className="bg-gradient-success">In Stock</Badge>;
@@ -205,7 +181,7 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
   };
 
   const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <TableHead 
+    <TableHead
       className="cursor-pointer hover:bg-muted/50 transition-colors"
       onClick={() => handleSort(field)}
     >
@@ -230,8 +206,28 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
             Manage your equipment, tools, and consumables
           </p>
         </div>
-        <div className="text-sm text-muted-foreground">
-          {filteredAndSortedAssets.length} of {assets.length} assets
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-muted-foreground">
+            {filteredAndSortedAssets.length} of {assets.length} assets
+          </div>
+          <Button
+            onClick={() => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Login Required",
+                  description: "Please log in to restock assets.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setShowRestockDialog(true);
+            }}
+            disabled={!hasPermission('print_documents')}
+            className="bg-gradient-primary hover:opacity-90"
+          >
+            <Package className="h-4 w-4 mr-2" />
+            Restock
+          </Button>
         </div>
       </div>
 
@@ -242,13 +238,13 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search assets by name, description, location, or service..."
+              placeholder="Search assets by name, location, or service..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 border-0 bg-muted/50 focus:bg-background transition-all duration-300"
             />
           </div>
-          
+
           {/* Filters */}
           <div className="flex gap-2">
             <Select value={filterCategory} onValueChange={(value: any) => setFilterCategory(value)}>
@@ -257,8 +253,8 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="Dewatering">Dewatering</SelectItem>
-                <SelectItem value="Waterproofing">Waterproofing</SelectItem>
+                <SelectItem value="dewatering">Dewatering</SelectItem>
+                <SelectItem value="waterproofing">Waterproofing</SelectItem>
               </SelectContent>
             </Select>
 
@@ -301,10 +297,11 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <SortableHeader field="name">Asset Name</SortableHeader>
-                {!isMobile && <TableHead>Description</TableHead>}
-                <SortableHeader field="total_stock">Total Stock</SortableHeader>
-                <SortableHeader field="reserved">Reserved</SortableHeader>
-                <SortableHeader field="available_stock">Available</SortableHeader>
+                <SortableHeader field="quantity">Total Stock</SortableHeader>
+                {!isMobile && <TableHead>Reserved</TableHead>}
+                {!isMobile && <TableHead>Available</TableHead>}
+                {!isMobile && <TableHead>Missing</TableHead>}
+                {!isMobile && <TableHead>Damaged</TableHead>}
                 {!isMobile && <TableHead>Category</TableHead>}
                 {!isMobile && <TableHead>Type</TableHead>}
                 <SortableHeader field="location">Location</SortableHeader>
@@ -316,146 +313,64 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
             {filteredAndSortedAssets.map((asset) => (
               <TableRow key={asset.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">
-                  {editingId === asset.id ? (
-                    <Input
-                      value={editingData.name || ''}
-                      onChange={(e) => setEditingData(prev => ({ ...prev, name: e.target.value }))}
-                      className="h-8"
-                    />
-                  ) : (
-                    asset.name
-                  )}
-                 </TableCell>
-                 
-                 {!isMobile && (
-                   <TableCell>
-                     {editingId === asset.id ? (
-                       <Input
-                         value={editingData.description || ''}
-                         onChange={(e) => setEditingData(prev => ({ ...prev, description: e.target.value }))}
-                         className="h-8"
-                         placeholder="Description"
-                       />
-                     ) : (
-                       <span className="text-muted-foreground">{asset.description || '-'}</span>
-                     )}
-                   </TableCell>
-                 )}
-                 
-                 <TableCell>
-                   {editingId === asset.id ? (
-                     <Input
-                       type="number"
-                       value={editingData.total_stock || 0}
-                       onChange={(e) => setEditingData(prev => ({ ...prev, total_stock: parseInt(e.target.value) || 0 }))}
-                       className="h-8 w-16 md:w-20"
-                       min="0"
-                     />
-                   ) : (
-                     <span className="font-semibold text-primary">{asset.total_stock}</span>
-                   )}
-                 </TableCell>
-
-                <TableCell>
-                  <span className="font-semibold">{asset.reserved}</span>
+                  {asset.name}
                 </TableCell>
 
                 <TableCell>
-                  <span className="font-semibold">{asset.total_stock - asset.reserved}</span>
-                </TableCell>
-                 
-                 {!isMobile && (
-                   <TableCell>
-                     {editingId === asset.id ? (
-                       <Select
-                         value={editingData.category || asset.category}
-                         onValueChange={(value: any) => setEditingData(prev => ({ ...prev, category: value }))}
-                       >
-                         <SelectTrigger className="h-8 w-32">
-                           <SelectValue />
-                         </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Dewatering">Dewatering</SelectItem>
-                            <SelectItem value="Waterproofing">Waterproofing</SelectItem>
-                          </SelectContent>
-                       </Select>
-                     ) : (
-                       <Badge variant="outline">{asset.category}</Badge>
-                     )}
-                   </TableCell>
-                 )}
-
-                 {!isMobile && (
-                   <TableCell>
-                     {editingId === asset.id ? (
-                       <Select
-                         value={editingData.type || asset.type}
-                         onValueChange={(value: any) => setEditingData(prev => ({ ...prev, type: value }))}
-                       >
-                         <SelectTrigger className="h-8 w-32">
-                           <SelectValue />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="equipment">Equipment</SelectItem>
-                           <SelectItem value="tools">Tools</SelectItem>
-                           <SelectItem value="consumable">Consumable</SelectItem>
-                           <SelectItem value="non-consumable">Non-Consumable</SelectItem>
-                         </SelectContent>
-                       </Select>
-                     ) : (
-                       <Badge variant="secondary">{asset.type}</Badge>
-                     )}
-                   </TableCell>
-                 )}
-
-                <TableCell>
-                  {editingId === asset.id ? (
-                    <Input
-                      value={editingData.location || ''}
-                      onChange={(e) => setEditingData(prev => ({ ...prev, location: e.target.value }))}
-                      className="h-8"
-                      placeholder="Location"
-                    />
-                  ) : (
-                    asset.location || '-'
-                  )}
+                  <span className="font-semibold text-primary">{asset.quantity}</span>
                 </TableCell>
 
-                <TableCell>{getStockBadge(asset)}</TableCell>
-                
+                {!isMobile && (
+                  <TableCell>
+                    {asset.reservedQuantity || 0}
+                  </TableCell>
+                )}
+
+                {!isMobile && (
+                  <TableCell>
+                    {asset.availableQuantity || 0}
+                  </TableCell>
+                )}
+
+                {!isMobile && (
+                  <TableCell>
+                    {asset.missingCount || 0}
+                  </TableCell>
+                )}
+
+                {!isMobile && (
+                  <TableCell>
+                    {asset.damagedCount || 0}
+                  </TableCell>
+                )}
+
+                {!isMobile && (
+                  <TableCell>
+                    <Badge variant="outline">{asset.category}</Badge>
+                  </TableCell>
+                )}
+
+                {!isMobile && (
+                  <TableCell>
+                    <Badge variant="secondary">{asset.type}</Badge>
+                  </TableCell>
+                )}
+
                 <TableCell>
-                  {editingId === asset.id ? (
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={saveEditing} className="h-8 w-8 p-0">
-                        <Check className="h-4 w-4 text-success" />
+                  {asset.location || '-'}
+                </TableCell>
+
+                <TableCell>{getStockBadge(asset.quantity, asset.lowStockLevel, asset.criticalStockLevel)}</TableCell>
+
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreHorizontal className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={cancelEditing} className="h-8 w-8 p-0">
-                        <X className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                    {/* Removed Edit Inline option as per user request */}
-                    {/* <DropdownMenuItem onClick={() => {
-                      if (!isAuthenticated) {
-                        toast({
-                          title: "Login Required",
-                          description: "Please log in to edit assets.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      startEditing(asset);
-                    }}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Inline
-                    </DropdownMenuItem> */}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {hasPermission('write_assets') && (
                         <DropdownMenuItem onClick={() => {
                           if (!isAuthenticated) {
                             toast({
@@ -470,6 +385,59 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
                           <Edit className="h-4 w-4 mr-2" />
                           Edit Form
                         </DropdownMenuItem>
+                      )}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Description
+                          </DropdownMenuItem>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>{asset.name} - Description</DialogTitle>
+                          </DialogHeader>
+                          <div className="mt-4">
+                            <p className="text-sm text-muted-foreground">
+                              {asset.description || 'No description available for this asset.'}
+                            </p>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (!isAuthenticated) {
+                            toast({
+                              title: "Login Required",
+                              description: "Please log in to view analytics.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          onViewAnalytics?.(asset);
+                        }}
+                      >
+                        <BarChart className="h-4 w-4 mr-2" />
+                        Analytics
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (!isAuthenticated) {
+                            toast({
+                              title: "Login Required",
+                              description: "Please log in to view restock history.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setSelectedAssetForHistory(asset);
+                          setShowRestockHistoryDialog(true);
+                        }}
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        Restock History
+                      </DropdownMenuItem>
+                      {hasPermission('delete_assets') && (
                         <DropdownMenuItem
                           onClick={() => {
                             if (!isAuthenticated) {
@@ -487,26 +455,9 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            if (!isAuthenticated) {
-                              toast({
-                                title: "Login Required",
-                                description: "Please log in to view analytics.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            setSelectedAsset(asset);
-                            setAnalyticsOpen(true);
-                          }}
-                        >
-                          <TrendingUp className="h-4 w-4 mr-2" />
-                          Analytics
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -528,15 +479,74 @@ export const AssetTable = ({ assets, onEdit, onDelete, onUpdateAsset, waybills, 
         )}
       </div>
 
-      {/* Analytics Modal */}
-      <AssetAnalyticsModal
-        asset={selectedAsset}
-        waybills={waybills}
-        quickCheckouts={quickCheckouts}
-        siteTransactions={siteTransactions}
-        sites={sites}
-        open={analyticsOpen}
-        onOpenChange={setAnalyticsOpen}
+      {/* Restock Dialog */}
+      <RestockDialog
+        open={showRestockDialog}
+        onOpenChange={setShowRestockDialog}
+        assets={assets}
+        onRestock={async (restockItems) => {
+          // Implement restock logic for multiple items
+          for (const item of restockItems) {
+            const asset = assets.find(a => a.id === item.assetId);
+            if (asset) {
+              const updatedAsset = {
+                ...asset,
+                quantity: asset.quantity + item.quantity,
+                availableQuantity: (asset.availableQuantity || 0) + item.quantity,
+              };
+              
+              // Update in database
+              if (window.db) {
+                await window.db.updateAsset(asset.id, updatedAsset);
+              }
+              
+              // Update in local state
+              onUpdateAsset(updatedAsset);
+            }
+          }
+
+          // Log individual restock entries for each asset
+          restockItems.forEach((item) => {
+            const asset = assets.find(a => a.id === item.assetId);
+            if (asset) {
+              const unitCost = item.totalCost / item.quantity;
+              const restockLog = {
+                id: Date.now().toString() + '-' + item.assetId,
+                assetId: item.assetId,
+                assetName: asset.name,
+                quantity: item.quantity,
+                unitCost: unitCost,
+                totalCost: item.totalCost,
+                type: 'restock' as const,
+                date: new Date(),
+                notes: `Restocked ${item.quantity} units`,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+
+              // Add to equipment logs if available
+              if (window.electronAPI) {
+                window.electronAPI.addEquipmentLog(restockLog);
+              } else if (window.db) {
+                window.db.createEquipmentLog(restockLog);
+              }
+            }
+          });
+
+          const totalQuantity = restockItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalCost = restockItems.reduce((sum, item) => sum + item.totalCost, 0);
+          toast({
+            title: "Restock Successful",
+            description: `Added ${totalQuantity} units across ${restockItems.length} asset(s) for $${totalCost.toFixed(2)}.`,
+          });
+        }}
+      />
+
+      {/* Restock History Dialog */}
+      <RestockHistoryDialog
+        asset={selectedAssetForHistory}
+        open={showRestockHistoryDialog}
+        onOpenChange={setShowRestockHistoryDialog}
       />
     </div>
   );

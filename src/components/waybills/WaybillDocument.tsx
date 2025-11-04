@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Waybill, Site, CompanySettings } from "@/types/asset";
 import { generateProfessionalPDF } from "@/utils/professionalPDFGenerator";
 import { FileText, Printer, Calendar, User, Truck, MapPin, Download } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface WaybillDocumentProps {
   waybill: Waybill;
@@ -14,6 +15,7 @@ interface WaybillDocumentProps {
 }
 
 export const WaybillDocument = ({ waybill, sites, companySettings, onClose }: WaybillDocumentProps) => {
+  const { hasPermission } = useAuth();
   const documentType = waybill.type === 'return' ? 'Return Waybill' : 'Waybill';
 
   const handlePrint = () => {
@@ -75,7 +77,7 @@ export const WaybillDocument = ({ waybill, sites, companySettings, onClose }: Wa
                   <div className="flex items-center gap-2 mt-1">
                     {getStatusBadge(waybill.status)}
                     <span className="text-sm text-muted-foreground">
-                      Created: {waybill.createdAt.toLocaleDateString()}
+                      Created: {new Date(waybill.createdAt).toLocaleDateString()}
                     </span>
                     {waybill.siteId && (
                       <div className="flex items-center gap-1 ml-4">
@@ -89,11 +91,11 @@ export const WaybillDocument = ({ waybill, sites, companySettings, onClose }: Wa
                 </div>
               </div>
             <div className="flex gap-2">
-              <Button onClick={handlePrint} variant="outline" className="gap-2">
+              <Button onClick={handlePrint} variant="outline" className="gap-2" disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}>
                 <Printer className="h-4 w-4" />
                 Print
               </Button>
-              <Button onClick={handleDownloadPDF} className="gap-2 bg-gradient-primary">
+              <Button onClick={handleDownloadPDF} className="gap-2 bg-gradient-primary" disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}>
                 <Download className="h-4 w-4" />
                 Download PDF
               </Button>
@@ -110,17 +112,17 @@ export const WaybillDocument = ({ waybill, sites, companySettings, onClose }: Wa
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Issue Date</p>
-                    <p className="font-medium">{waybill.issueDate.toLocaleDateString()}</p>
+                    <p className="text-sm text-muted-foreground">Date</p>
+                    <p className="font-medium">{new Date(waybill.sentToSiteDate || waybill.issueDate).toLocaleDateString()}</p>
                   </div>
                 </div>
-                
+
                 {waybill.expectedReturnDate && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Expected Return</p>
-                      <p className="font-medium">{waybill.expectedReturnDate.toLocaleDateString()}</p>
+                      <p className="font-medium">{new Date(waybill.expectedReturnDate).toLocaleDateString()}</p>
                     </div>
                   </div>
                 )}

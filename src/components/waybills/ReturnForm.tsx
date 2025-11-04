@@ -30,6 +30,14 @@ export const ReturnForm = ({ waybill, onSubmit, onClose }: ReturnFormProps) => {
     setReturnItems(prev => prev.map((item, i) => i === index ? { ...item, condition } : item));
   };
 
+  const handleReturnAll = () => {
+    setReturnItems(prev => prev.map(item => {
+      const originalItem = waybill.items.find(i => i.assetId === item.assetId);
+      const maxQuantity = originalItem ? originalItem.quantity - originalItem.returnedQuantity : 0;
+      return { ...item, quantity: maxQuantity };
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -116,13 +124,18 @@ export const ReturnForm = ({ waybill, onSubmit, onClose }: ReturnFormProps) => {
               />
             </div>
 
-            <div className="flex justify-end gap-4 pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
+            <div className="flex justify-between gap-4 pt-4">
+              <Button type="button" variant="secondary" onClick={handleReturnAll}>
+                Return All
               </Button>
-              {/* <Button type="submit" className="bg-gradient-primary">
-                Process Return
-              </Button> */}
+              <div className="flex gap-4">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-gradient-primary">
+                  Process Return
+                </Button>
+              </div>
             </div>
           </form>
         </CardContent>

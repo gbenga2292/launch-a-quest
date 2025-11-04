@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Waybill, CompanySettings, Site } from "@/types/asset";
+import { logger } from "@/lib/logger";
 
 interface PDFGenerationOptions {
   waybill: Waybill;
@@ -9,17 +10,36 @@ interface PDFGenerationOptions {
   type: 'waybill' | 'return';
 }
 
+const defaultCompanySettings: CompanySettings = {
+  companyName: "Dewatering Construction Etc Limited",
+  logo: "/logo.png",
+  address: "7 Musiliu Smith St, formerly Panti Street, Adekunle, Lagos 101212, Lagos",
+  phone: "+2349030002182",
+  email: "",
+  website: "https://dewaterconstruct.com/",
+  currency: "USD",
+  dateFormat: "MM/dd/yyyy",
+  theme: "light",
+  notifications: {
+    email: true,
+    push: true,
+  },
+};
+
 export const generateProfessionalPDF = ({ waybill, companySettings, sites, type }: PDFGenerationOptions) => {
   const pdf = new jsPDF('p', 'mm', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  
+
   // Set Times New Roman font
   pdf.setFont('times', 'normal');
-  
+
   const site = sites.find(s => s.id === waybill.siteId);
   const fromLocation = 'DCEL Warehouse';
   const toLocation = site?.name || 'Client Site';
+
+  // Use provided companySettings or default to company information
+  const effectiveCompanySettings = companySettings || defaultCompanySettings;
   
   // Function to render header (logo, title, waybill no/date/driver/vehicle left-aligned)
   const renderHeader = () => {
@@ -29,11 +49,11 @@ export const generateProfessionalPDF = ({ waybill, companySettings, sites, type 
     const logoWidth = 85;
     const logoHeight = 30;
     const logoY = headerY; // No offset for minimal top space
-    if (companySettings?.logo) {
+    if (defaultCompanySettings.logo) {
       try {
-        pdf.addImage(companySettings.logo, 'PNG', 20, logoY, logoWidth, logoHeight);
+        pdf.addImage(defaultCompanySettings.logo, 'PNG', 20, logoY, logoWidth, logoHeight);
       } catch (error) {
-        console.warn('Could not load company logo:', error);
+        logger.warn('Could not load company logo', { context: 'ProfessionalPDFGenerator' });
         // Fallback circle
         pdf.setFillColor(200, 200, 200);
         pdf.circle(37.5, logoY + 15, 15, 'F');
@@ -68,14 +88,15 @@ export const generateProfessionalPDF = ({ waybill, companySettings, sites, type 
     pdf.text(`Waybill No: ${waybill.id}`, 20, headerY);
     headerY += 8;
 
-    // Date (left-aligned, bold)
+    // Date (left-aligned, bold) - use sent to site date if available, otherwise issue date
     const getOrdinal = (n: number) => {
       const s = ["th", "st", "nd", "rd"];
       const v = n % 100;
       return n + (s[(v - 20) % 10] || s[v] || s[0]);
     };
-    const day = waybill.issueDate.getDate();
-    const monthYear = waybill.issueDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const effectiveDate = waybill.sentToSiteDate || waybill.issueDate;
+    const day = effectiveDate.getDate();
+    const monthYear = effectiveDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     const dateText = `${getOrdinal(day)} ${monthYear}`;
     pdf.text(`Date: ${dateText}`, 20, headerY);
     headerY += 8;
@@ -111,7 +132,7 @@ export const generateProfessionalPDF = ({ waybill, companySettings, sites, type 
     // Company name below (left-aligned, together as footer)
     pdf.setFontSize(12);
     pdf.setFont('times', 'italic');
-    pdf.text(companySettings?.companyName || 'Dewatering Construction Ltd', 20, footerY + 8);
+    pdf.text(defaultCompanySettings.companyName, 20, footerY + 8);
   };
 
   let yPos = renderHeader();

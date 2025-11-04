@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Asset, Waybill, WaybillItem, Site, Employee } from "@/types/asset";
+import { Asset, Waybill, WaybillItem, Site, Employee, Vehicle } from "@/types/asset";
 import { FileText, Plus, Minus, X, Edit2 } from "lucide-react";
 
 interface EditWaybillFormProps {
@@ -14,7 +14,7 @@ interface EditWaybillFormProps {
   assets: Asset[];
   sites: Site[];
   employees: Employee[];
-  vehicles: string[];
+  vehicles: Vehicle[];
   onUpdate: (updatedWaybill: Partial<Waybill>) => void;
   onCancel: () => void;
 }
@@ -65,7 +65,7 @@ export const EditWaybillForm = ({
     });
   }, [waybill]);
 
-  const availableAssets = assets.filter(asset => asset.quantity > 0 && !asset.siteId);
+  const availableAssets = assets.filter(asset => asset.quantity > 0);
 
   const handleAddItem = () => {
     setFormData(prev => ({
@@ -95,11 +95,12 @@ export const EditWaybillForm = ({
         if (i === index) {
           if (field === 'assetId') {
             const asset = assets.find(a => a.id === value);
+            const maxQty = getMaxQuantity(value);
             return {
               ...item,
               assetId: value,
               assetName: asset?.name || '',
-              quantity: Math.min(item.quantity, asset?.quantity || 0)
+              quantity: Math.min(item.quantity || 1, maxQty)
             };
           }
           return { ...item, [field]: value };
@@ -130,8 +131,14 @@ export const EditWaybillForm = ({
     if (waybill.status === 'outstanding') {
       for (const item of formData.items) {
         const asset = assets.find(a => a.id === item.assetId);
-        if (asset && item.quantity > asset.quantity) {
-          alert(`Quantity for ${item.assetName} exceeds available stock.`);
+        if (!asset) continue;
+        
+        // Calculate available including what was originally reserved in this waybill
+        const originalItemQuantity = waybill.items.find(i => i.assetId === item.assetId)?.quantity || 0;
+        const maxAllowed = asset.availableQuantity + originalItemQuantity;
+        
+        if (item.quantity > maxAllowed) {
+          alert(`Quantity for ${item.assetName} exceeds available stock (${maxAllowed} available).`);
           setIsSubmitting(false);
           return;
         }
@@ -155,7 +162,17 @@ export const EditWaybillForm = ({
 
   const getMaxQuantity = (assetId: string) => {
     const asset = assets.find(a => a.id === assetId);
-    return asset?.quantity || 0;
+    if (!asset) return 0;
+    
+    // For outstanding waybills, add back the quantity currently reserved by THIS waybill
+    if (waybill.status === 'outstanding') {
+      const currentItemQuantity = waybill.items.find(item => item.assetId === assetId)?.quantity || 0;
+      // Available + what's currently reserved in this waybill
+      return asset.availableQuantity + currentItemQuantity;
+    }
+    
+    // For sent waybills, use available quantity only
+    return asset.availableQuantity;
   };
 
   return (
@@ -230,9 +247,9 @@ export const EditWaybillForm = ({
                       <SelectValue placeholder="Select a driver" />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees.filter(emp => emp.role === 'driver').map((driver) => (
-                        <SelectItem key={driver.id} value={driver.name}>
-                          {driver.name}
+                      {employees.filter(emp => emp.status === 'active').map((employee) => (
+                        <SelectItem key={employee.id} value={employee.name}>
+                          {employee.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -254,9 +271,9 @@ export const EditWaybillForm = ({
                       <SelectValue placeholder="Select a vehicle" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((vehicle, index) => (
-                        <SelectItem key={index} value={vehicle}>
-                          {vehicle}
+                      {vehicles.map((vehicle) => (
+                        <SelectItem key={vehicle.id} value={vehicle.name}>
+                          {vehicle.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -313,21 +330,28 @@ export const EditWaybillForm = ({
                             <div className="space-y-2">
                               <Label>Asset</Label>
                               <Select
-                                value={item.assetId}
+                                value={item.assetId || ""}
                                 onValueChange={(value) => handleItemChange(index, 'assetId', value)}
                               >
                                 <SelectTrigger className="border-0 bg-background">
-                                  <SelectValue>
-                                    {item.assetName || "Select asset"}
+                                  <SelectValue placeholder="Select asset">
+                                    {item.assetId && item.assetName ? item.assetName : "Select asset"}
                                   </SelectValue>
                                 </SelectTrigger>
-                                <SelectContent>
-                                  {availableAssets.filter(asset => !formData.items.some(i => i.assetId === asset.id && i !== item)).map((asset) => (
-                                    <SelectItem key={asset.id} value={asset.id}>
-                                      {asset.name} (Available: {asset.quantity} {asset.unitOfMeasurement})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
+                                 <SelectContent className="bg-background z-50">
+                                   {availableAssets.filter(asset => !formData.items.some((formItem, idx) => idx !== index && formItem.assetId === asset.id)).map((asset) => {
+                                     const currentItemQty = waybill.items.find(i => i.assetId === asset.id)?.quantity || 0;
+                                     const displayAvailable = waybill.status === 'outstanding' 
+                                       ? asset.availableQuantity + currentItemQty 
+                                       : asset.availableQuantity;
+                                     
+                                     return (
+                                       <SelectItem key={asset.id} value={asset.id}>
+                                         {asset.name} (Available: {displayAvailable} {asset.unitOfMeasurement})
+                                       </SelectItem>
+                                     );
+                                   })}
+                                 </SelectContent>
                               </Select>
                             </div>
 

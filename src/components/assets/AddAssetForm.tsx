@@ -5,80 +5,118 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Item as Asset, Site } from "@/services/api";
-import { Package, Save, X } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
+import { Asset, Site } from "@/types/asset";
+import { Package, Save, X, AlertCircle } from "lucide-react";
 
 interface AddAssetFormProps {
-  onAddAsset?: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'created_at' | 'updated_at' | 'reserved'>) => void;
+  onAddAsset?: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => void;
   asset?: Asset;
   onSave?: (asset: Asset) => void;
   onCancel?: () => void;
-  onSuccess?: () => void;
   sites?: Site[];
+  existingAssets?: Asset[];
 }
 
-export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, sites }: AddAssetFormProps) => {
-  const fixedLocations = ["Store", "OfficeStorage", "Warehouse"];
-
+export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, sites, existingAssets = [] }: AddAssetFormProps) => {
   const [formData, setFormData] = useState({
     name: asset?.name || '',
     description: asset?.description || '',
-    total_stock: asset?.total_stock || asset?.quantity || 0,
-    unit: asset?.unit || asset?.unitOfMeasurement || '',
-    category: (asset?.category || 'Dewatering') as 'Dewatering' | 'Waterproofing',
-    type: (asset?.type || 'equipment') as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
+    quantity: asset?.quantity || 0,
+    unitOfMeasurement: asset?.unitOfMeasurement || 'pcs',
+    category: asset?.category || 'dewatering' as 'dewatering' | 'waterproofing',
+    type: asset?.type || 'equipment' as 'consumable' | 'non-consumable' | 'tools' | 'equipment',
     location: asset?.location || '',
-    lowStockLevel: asset?.lowStockLevel || asset?.low_stock_level || 0,
-    criticalStockLevel: asset?.criticalStockLevel || asset?.critical_stock_level || 0
+    lowStockLevel: asset?.lowStockLevel || 10,
+    criticalStockLevel: asset?.criticalStockLevel || 5,
+    cost: asset?.cost || 0,
+    powerSource: asset?.powerSource as 'fuel' | 'electricity' | 'hybrid' | 'manual' | undefined,
+    fuelCapacity: asset?.fuelCapacity || undefined,
+    fuelConsumptionRate: asset?.fuelConsumptionRate || undefined,
+    electricityConsumption: asset?.electricityConsumption || undefined,
+    requiresLogging: asset?.requiresLogging || false
   });
 
-  const [customLocation, setCustomLocation] = useState(asset?.location && !fixedLocations.includes(asset.location) ? asset.location : '');
-  const [selectValue, setSelectValue] = useState(
-    asset?.location === '' ? undefined :
-    fixedLocations.includes(asset?.location || '') ? asset?.location : "custom"
-  );
-  const [validationErrors, setValidationErrors] = useState<{ lowStockLevel?: string; criticalStockLevel?: string }>({});
+  const [selectValue, setSelectValue] = useState(() => {
+    if (asset?.location) {
+      if (['store', 'warehouse', 'office cupboard'].includes(asset.location)) {
+        return asset.location;
+      } else {
+        return 'custom';
+      }
+    }
+    return '';
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [customLocation, setCustomLocation] = useState(asset?.location || '');
+  const [nameError, setNameError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.unit) {
+    if (!formData.name || !formData.unitOfMeasurement) {
       return;
     }
 
-    // Validation: Low Stock Level must be lower than Critical Stock Level
-    if (formData.lowStockLevel >= formData.criticalStockLevel) {
-      alert('Low Stock Level must be lower than Critical Stock Level');
+    // Check for duplicate asset name
+    const trimmedName = formData.name.trim();
+    const isDuplicate = existingAssets.some(
+      existingAsset => 
+        existingAsset.name.toLowerCase() === trimmedName.toLowerCase() &&
+        existingAsset.id !== asset?.id // Allow same name when editing the same asset
+    );
+
+    if (isDuplicate) {
+      setNameError(`An asset with the name "${trimmedName}" already exists. Please use a unique name.`);
       return;
     }
+
+    setNameError(''); // Clear any previous error
 
     if (asset && onSave) {
       onSave({
         ...asset,
         ...formData,
-        updated_at: new Date().toISOString()
-      } as Asset);
+        name: trimmedName,
+        requiresLogging: formData.requiresLogging,
+        updatedAt: new Date()
+      });
     } else if (onAddAsset) {
-      await (onAddAsset as any)({
+      onAddAsset({
         ...formData,
+        name: trimmedName,
+        powerSource: formData.powerSource || undefined,
+        fuelCapacity: formData.fuelCapacity || undefined,
+        fuelConsumptionRate: formData.fuelConsumptionRate || undefined,
+        electricityConsumption: formData.electricityConsumption || undefined,
+        reservedQuantity: 0,
+        availableQuantity: formData.quantity - 0, // quantity - reservedQuantity
+        siteQuantities: {},
         service: '',
         status: 'active',
-        condition: 'good'
+        condition: 'good',
+        requiresLogging: formData.requiresLogging
       });
       setFormData({
         name: '',
         description: '',
-        total_stock: 0,
-        unit: '',
-        category: 'Dewatering',
+        quantity: 0,
+        unitOfMeasurement: 'pcs',
+        category: 'dewatering',
         type: 'equipment',
         location: '',
-        lowStockLevel: 0,
-        criticalStockLevel: 0
+        lowStockLevel: 10,
+        criticalStockLevel: 5,
+        cost: 0,
+        powerSource: undefined,
+        fuelCapacity: undefined,
+        fuelConsumptionRate: undefined,
+        electricityConsumption: undefined,
+        requiresLogging: false
       });
-      setSelectValue(undefined);
+      setSelectValue('');
       setCustomLocation('');
-      onSuccess?.();
+      setNameError('');
     }
   };
 
@@ -98,7 +136,7 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
         </p>
       </div>
 
-      <Card className="border-0 shadow-medium max-w-2xl mx-auto">
+      <Card className="border-0 shadow-medium max-w-7xl mx-auto">
         <CardHeader>
           <CardTitle>Asset Information</CardTitle>
         </CardHeader>
@@ -110,25 +148,56 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, name: e.target.value});
+                    setNameError(''); // Clear error when user types
+                  }}
                   placeholder="Enter asset name"
-                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                  className={`border-0 bg-muted/50 focus:bg-background transition-all duration-300 ${nameError ? 'border-destructive' : ''}`}
                   required
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="unit">Unit of Measurement *</Label>
-                <Input
-                  id="unit"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                  placeholder="e.g. pcs, kg, meters"
-                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
-                  required
-                />
+                {nameError && (
+                  <div className="flex items-start gap-2 text-destructive text-sm mt-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>{nameError}</span>
+                  </div>
+                )}
               </div>
             </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="unitOfMeasurement">Unit of Measurement *</Label>
+                <Combobox
+                  options={[
+                    { value: 'pcs', label: 'pcs - Pieces' },
+                    { value: 'set', label: 'set - Set' },
+                    { value: 'pair', label: 'pair - Pair' },
+                    { value: 'box', label: 'box - Box' },
+                    { value: 'bag', label: 'bag - Bag' },
+                    { value: 'roll', label: 'roll - Roll' },
+                    { value: 'drum', label: 'drum - Drum' },
+                    { value: 'can', label: 'can - Can' },
+                    { value: 'bottle', label: 'bottle - Bottle' },
+                    { value: 'pkt', label: 'pkt - Packet' },
+                    { value: 'litre', label: 'litre - Litre' },
+                    { value: 'gallon', label: 'gallon - Gallon' },
+                    { value: 'kg', label: 'kg - Kilogram' },
+                    { value: 'ton', label: 'ton - Ton' },
+                    { value: 'meter', label: 'meter - Meter' },
+                    { value: 'feet', label: 'feet - Feet' },
+                    { value: 'sqm', label: 'sqm - Square Meter' },
+                    { value: 'sqft', label: 'sqft - Square Feet' },
+                    { value: 'unit', label: 'unit - Unit' }
+                  ]}
+                  value={formData.unitOfMeasurement}
+                  onValueChange={(value) => setFormData({...formData, unitOfMeasurement: value})}
+                  placeholder="Select or type unit of measurement"
+                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  💡 You can select from the list or type a custom unit
+                </p>
+              </div>
 
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
@@ -142,68 +211,37 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="total_stock">Total Stock</Label>
+                <Label htmlFor="quantity">Quantity</Label>
                 <Input
-                  id="total_stock"
+                  id="quantity"
                   type="number"
                   min="0"
-                  value={formData.total_stock}
-                  onChange={(e) => setFormData({...formData, total_stock: parseInt(e.target.value) || 0})}
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
                   className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="lowStockLevel">Low Stock Level</Label>
+                <Label htmlFor="cost">Cost</Label>
                 <Input
-                  id="lowStockLevel"
+                  id="cost"
                   type="number"
                   min="0"
-                  value={formData.lowStockLevel}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    setFormData({...formData, lowStockLevel: value});
-                    if (value >= formData.criticalStockLevel) {
-                      setValidationErrors(prev => ({ ...prev, lowStockLevel: 'Low Stock Level must be lower than Critical Stock Level' }));
-                    } else {
-                      setValidationErrors(prev => ({ ...prev, lowStockLevel: undefined }));
-                    }
-                  }}
+                  step="0.01"
+                  value={formData.cost}
+                  onChange={(e) => setFormData({...formData, cost: parseFloat(e.target.value) || 0})}
                   className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
                 />
-                {validationErrors.lowStockLevel && (
-                  <p className="text-sm text-red-500">{validationErrors.lowStockLevel}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="criticalStockLevel">Critical Stock Level</Label>
-                <Input
-                  id="criticalStockLevel"
-                  type="number"
-                  min="0"
-                  value={formData.criticalStockLevel}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    setFormData({...formData, criticalStockLevel: value});
-                    if (value <= formData.lowStockLevel) {
-                      setValidationErrors(prev => ({ ...prev, criticalStockLevel: 'Critical Stock Level must be higher than Low Stock Level' }));
-                    } else {
-                      setValidationErrors(prev => ({ ...prev, criticalStockLevel: undefined }));
-                    }
-                  }}
-                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
-                />
-                {validationErrors.criticalStockLevel && (
-                  <p className="text-sm text-red-500">{validationErrors.criticalStockLevel}</p>
-                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(value: 'Dewatering' | 'Waterproofing') => 
+                <Select
+                  value={formData.category}
+                  onValueChange={(value: 'dewatering' | 'waterproofing') =>
                     setFormData({...formData, category: value})
                   }
                 >
@@ -211,17 +249,44 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Dewatering">Dewatering</SelectItem>
-                    <SelectItem value="Waterproofing">Waterproofing</SelectItem>
+                    <SelectItem value="dewatering">Dewatering</SelectItem>
+                    <SelectItem value="waterproofing">Waterproofing</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="lowStockLevel">Low Stock Level</Label>
+                <Input
+                  id="lowStockLevel"
+                  type="number"
+                  min="0"
+                  value={formData.lowStockLevel}
+                  onChange={(e) => setFormData({...formData, lowStockLevel: parseInt(e.target.value) || 0})}
+                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="criticalStockLevel">Critical Stock Level</Label>
+                <Input
+                  id="criticalStockLevel"
+                  type="number"
+                  min="0"
+                  value={formData.criticalStockLevel}
+                  onChange={(e) => setFormData({...formData, criticalStockLevel: parseInt(e.target.value) || 0})}
+                  className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                />
+
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="type">Type</Label>
-                <Select 
-                  value={formData.type} 
-                  onValueChange={(value: 'consumable' | 'non-consumable' | 'tools' | 'equipment') => 
+                <Select
+                  value={formData.type}
+                  onValueChange={(value: 'consumable' | 'non-consumable' | 'tools' | 'equipment') =>
                     setFormData({...formData, type: value})
                   }
                 >
@@ -252,12 +317,12 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
                 }}
               >
                 <SelectTrigger className="border-0 bg-muted/50 focus:bg-background transition-all duration-300">
-                  <SelectValue placeholder="Select a location or enter custom location" />
+                  <SelectValue placeholder="Select asset location" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Store">Store</SelectItem>
-                  <SelectItem value="OfficeStorage">OfficeStorage</SelectItem>
-                  <SelectItem value="Warehouse">Warehouse</SelectItem>
+                  <SelectItem value="store">Store</SelectItem>
+                  <SelectItem value="warehouse">Warehouse</SelectItem>
+                  <SelectItem value="office cupboard">Office Cupboard</SelectItem>
                   <SelectItem value="custom">Custom Location</SelectItem>
                 </SelectContent>
               </Select>
@@ -274,6 +339,116 @@ export const AddAssetForm = ({ onAddAsset, asset, onSave, onCancel, onSuccess, s
                 />
               )}
             </div>
+
+            {/* Equipment-specific operational details */}
+            {formData.type === 'equipment' && (
+              <div className="space-y-6 p-6 bg-muted/30 rounded-lg border-2 border-primary/20">
+                <div className="flex items-center gap-2 mb-4">
+                  <Package className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Equipment Operational Details</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="powerSource">Power Source</Label>
+                    <Select
+                      value={formData.powerSource || ''}
+                      onValueChange={(value: 'fuel' | 'electricity' | 'hybrid' | 'manual') =>
+                        setFormData({...formData, powerSource: value})
+                      }
+                    >
+                      <SelectTrigger className="border-0 bg-muted/50 focus:bg-background transition-all duration-300">
+                        <SelectValue placeholder="Select power source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fuel">Fuel (Diesel/Petrol)</SelectItem>
+                        <SelectItem value="electricity">Electricity</SelectItem>
+                        <SelectItem value="hybrid">Hybrid (Fuel + Electric)</SelectItem>
+                        <SelectItem value="manual">Manual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="requiresLogging">Requires Daily Logging</Label>
+                    <Select
+                      value={formData.requiresLogging ? 'yes' : 'no'}
+                      onValueChange={(value) => setFormData({...formData, requiresLogging: value === 'yes'})}
+                    >
+                      <SelectTrigger className="border-0 bg-muted/50 focus:bg-background transition-all duration-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes - Show in Machines section</SelectItem>
+                        <SelectItem value="no">No - Hide from Machines section</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Only equipment that requires daily logging will appear in the Machines section at sites.
+                    </p>
+                  </div>
+
+                  {(formData.powerSource === 'fuel' || formData.powerSource === 'hybrid') && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="fuelCapacity">Fuel Tank Capacity (Liters)</Label>
+                        <Input
+                          id="fuelCapacity"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData.fuelCapacity || ''}
+                          onChange={(e) => setFormData({...formData, fuelCapacity: e.target.value ? parseFloat(e.target.value) : undefined})}
+                          placeholder="e.g., 90"
+                          className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="fuelConsumptionRate">Fuel Consumption (Liters/24hrs)</Label>
+                        <Input
+                          id="fuelConsumptionRate"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData.fuelConsumptionRate || ''}
+                          onChange={(e) => setFormData({...formData, fuelConsumptionRate: e.target.value ? parseFloat(e.target.value) : undefined})}
+                          placeholder="e.g., 18"
+                          className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {(formData.powerSource === 'electricity' || formData.powerSource === 'hybrid') && (
+                    <div className="space-y-2">
+                      <Label htmlFor="electricityConsumption">Power Consumption (kWh/day)</Label>
+                      <Input
+                        id="electricityConsumption"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.electricityConsumption || ''}
+                        onChange={(e) => setFormData({...formData, electricityConsumption: e.target.value ? parseFloat(e.target.value) : undefined})}
+                        placeholder="e.g., 75"
+                        className="border-0 bg-muted/50 focus:bg-background transition-all duration-300"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {formData.powerSource === 'fuel' && formData.fuelCapacity > 0 && formData.fuelConsumptionRate > 0 && (
+                  <div className="p-4 bg-primary/10 rounded-lg border border-primary/30">
+                    <p className="text-sm font-medium text-primary">
+                      ⚡ Operating Duration: ~{(formData.fuelCapacity / formData.fuelConsumptionRate * 24).toFixed(1)} hours per full tank
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Refuel needed every {(formData.fuelCapacity / formData.fuelConsumptionRate).toFixed(1)} days (24/7 operation)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-3 pt-4">
               {onCancel && (

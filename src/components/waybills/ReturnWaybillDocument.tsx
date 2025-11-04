@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Waybill, Site, CompanySettings } from "@/types/asset";
 import { generateProfessionalPDF } from "@/utils/professionalPDFGenerator";
 import { FileText, Printer, Calendar, User, Truck, ArrowLeft, MapPin, Download } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ReturnWaybillDocumentProps {
   waybill: Waybill;
@@ -14,6 +15,7 @@ interface ReturnWaybillDocumentProps {
 }
 
 export const ReturnWaybillDocument = ({ waybill, sites, companySettings, onClose }: ReturnWaybillDocumentProps) => {
+  const { hasPermission } = useAuth();
   const handlePrint = () => {
     const { pdf } = generateProfessionalPDF({
       waybill,
@@ -73,11 +75,11 @@ export const ReturnWaybillDocument = ({ waybill, sites, companySettings, onClose
             <div className="flex items-center gap-2 mt-1">
               {getStatusBadge(waybill.status)}
               <span className="text-sm text-muted-foreground">
-                Created: {waybill.createdAt.toLocaleDateString()}
+                Created: {new Date(waybill.createdAt).toLocaleDateString()}
               </span>
               {waybill.status === 'return_completed' && (
                 <span className="text-sm text-muted-foreground ml-4">
-                  Actual Return: {waybill.updatedAt.toLocaleDateString()}
+                  Actual Return: {new Date(waybill.updatedAt).toLocaleDateString()}
                 </span>
               )}
               {waybill.siteId && (
@@ -92,11 +94,11 @@ export const ReturnWaybillDocument = ({ waybill, sites, companySettings, onClose
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handlePrint} variant="outline" className="gap-2">
+              <Button onClick={handlePrint} variant="outline" className="gap-2" disabled={!hasPermission('print_documents')}>
                 <Printer className="h-4 w-4" />
                 Print
               </Button>
-              <Button onClick={handleDownloadPDF} className="gap-2 bg-gradient-primary">
+              <Button onClick={handleDownloadPDF} className="gap-2 bg-gradient-primary" disabled={!hasPermission('print_documents')}>
                 <Download className="h-4 w-4" />
                 Download PDF
               </Button>
@@ -114,7 +116,7 @@ export const ReturnWaybillDocument = ({ waybill, sites, companySettings, onClose
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Issue Date</p>
-                    <p className="font-medium">{waybill.issueDate.toLocaleDateString()}</p>
+                    <p className="font-medium">{new Date(waybill.issueDate).toLocaleDateString()}</p>
                   </div>
                 </div>
 
@@ -123,7 +125,7 @@ export const ReturnWaybillDocument = ({ waybill, sites, companySettings, onClose
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Expected Return</p>
-                      <p className="font-medium">{waybill.expectedReturnDate.toLocaleDateString()}</p>
+                      <p className="font-medium">{new Date(waybill.expectedReturnDate).toLocaleDateString()}</p>
                     </div>
                   </div>
                 )}

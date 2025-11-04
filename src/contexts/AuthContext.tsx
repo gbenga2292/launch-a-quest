@@ -1,20 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { User, Session } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
+
+// User type and role definitions remain the same
+export type UserRole = 'admin' | 'data_entry_supervisor' | 'regulatory' | 'manager' | 'staff';
+
+export interface User {
+  id: string;
+  username: string;
+  role: UserRole;
+  name: string;
+  email?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  isGuest: boolean;
-  user: User | null;
-  session: Session | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  signup: (email: string, password: string, confirmPassword: string) => Promise<{ success: boolean; message?: string }>;
-  guestLogin: () => void;
-  logout: () => Promise<void>;
-  canEditAssets: boolean;
-  canEditSites: boolean;
-  canImportAssets: boolean;
-  canAccessSettings: boolean;
+  currentUser: User | null;
+  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  logout: () => void;
+  hasPermission: (permission: string) => boolean;
+  getUsers: () => Promise<User[]>;
+  createUser: (userData: { name: string; username: string; password: string; role: UserRole; email?: string }) => Promise<{ success: boolean; message?: string }>;
+  updateUser: (userId: string, userData: { name: string; username: string; role: UserRole; email?: string }) => Promise<{ success: boolean; message?: string }>;
+  deleteUser: (userId: string) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,136 +37,183 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isGuest, setIsGuest] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    // Check if user was previously authenticated
+    const saved = localStorage.getItem('isAuthenticated');
+    return saved === 'true';
+  });
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    // Restore user from localStorage
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
 
-  // Permission flags based on user type
-  const canEditAssets = !isGuest;
-  const canEditSites = !isGuest;
-  const canImportAssets = !isGuest;
-  const canAccessSettings = !isGuest;
-
-  useEffect(() => {
-    // Check for guest mode in localStorage
-    const guestMode = localStorage.getItem('guestMode') === 'true';
-    if (guestMode) {
-      setIsGuest(true);
-      setIsAuthenticated(true);
-      return;
-    }
-
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsAuthenticated(!!session);
-        setIsGuest(false); // Reset guest mode on auth state change
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+  // Login now calls the backend through the preload script
+  const login = async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { success: false, message: error.message };
+      // Hardcoded admin fallback for testing (works without database)
+      if (username === 'admin' && password === 'admin123') {
+        const hardcodedAdmin: User = {
+          id: 'admin',
+          username: 'admin',
+          role: 'admin',
+          name: 'Administrator',
+          email: 'admin@example.com',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        setCurrentUser(hardcodedAdmin);
+        setIsAuthenticated(true);
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('currentUser', JSON.stringify(hardcodedAdmin));
+        return { success: true };
       }
-
-      // Clear guest mode when logging in
-      localStorage.removeItem('guestMode');
-      setIsGuest(false);
-
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, message: error.message || 'Login failed' };
-    }
-  };
-
-  const signup = async (email: string, password: string, confirmPassword: string): Promise<{ success: boolean; message?: string }> => {
-    if (password !== confirmPassword) {
-      return { success: false, message: 'Passwords do not match' };
-    }
-
-    if (password.length < 6) {
-      return { success: false, message: 'Password must be at least 6 characters' };
-    }
-
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl
+      
+      // Try database login if available
+      if (window.db) {
+        const result = await window.db.login(username, password);
+        if (result.success && result.user) {
+          setCurrentUser(result.user);
+          setIsAuthenticated(true);
+          // Persist authentication state in localStorage
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('currentUser', JSON.stringify(result.user));
+          return { success: true };
+        } else {
+          return { success: false, message: result.message || 'Invalid credentials' };
         }
-      });
-
-      if (error) {
-        return { success: false, message: error.message };
       }
-
-      return { success: true, message: 'Account created successfully! Please check your email to confirm your account.' };
-    } catch (error: any) {
-      return { success: false, message: error.message || 'Signup failed' };
+      
+      // If no database and not admin, return error
+      return { success: false, message: 'Database not available. Use admin/admin123 to login.' };
+    } catch (error) {
+      logger.error('Login error', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
     }
   };
 
-  const guestLogin = () => {
-    localStorage.setItem('guestMode', 'true');
-    setIsGuest(true);
-    setIsAuthenticated(true);
-    setUser(null);
-    setSession(null);
+  const logout = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    // Clear authentication state from localStorage
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('currentUser');
   };
 
-  const logout = async (): Promise<void> => {
-    if (isGuest) {
-      // Clear guest mode
-      localStorage.removeItem('guestMode');
-      setIsGuest(false);
-      setIsAuthenticated(false);
-      setUser(null);
-      setSession(null);
-    } else {
-      // Regular logout
-      await supabase.auth.signOut();
-      setIsAuthenticated(false);
-      setUser(null);
-      setSession(null);
+  // Permission logic remains the same, as it's based on the role in currentUser state
+  const hasPermission = (permission: string): boolean => {
+    if (!currentUser) return false;
+
+    const rolePermissions: Record<UserRole, string[]> = {
+        admin: ['*'], // Admin has all permissions
+        data_entry_supervisor: [
+          'read_assets', 'write_assets',
+          'read_waybills', 'write_waybills',
+          'read_returns', 'write_returns', 'delete_returns',
+          'read_sites',
+          'read_employees', 'write_employees', 'delete_employees',
+          'write_vehicles', 'delete_vehicles',
+          'manage_users',
+          'edit_company_info', 'view_activity_log', 'change_theme',
+          'print_documents'
+        ],
+        regulatory: [
+          'read_assets',
+          'read_waybills',
+          'read_returns',
+          'read_sites',
+          'read_reports',
+          'write_employees',
+          'write_vehicles',
+          'edit_company_info', 'change_theme',
+          'print_documents'
+        ],
+        manager: [
+          'read_assets', 'write_assets',
+          'read_waybills', 'write_waybills',
+          'read_returns', 'write_returns',
+          'read_sites',
+          'read_employees',
+          'read_reports',
+          'read_quick_checkouts', 'write_quick_checkouts',
+          'print_documents'
+        ],
+        staff: [
+          'read_assets',
+          'read_waybills',
+          'read_returns',
+          'read_sites',
+          'read_quick_checkouts'
+        ]
+      };
+
+    const userPermissions = rolePermissions[currentUser.role] || [];
+    return userPermissions.includes('*') || userPermissions.includes(permission);
+  };
+
+  const getUsers = async (): Promise<User[]> => {
+    try {
+      if (!window.db) {
+        return [];
+      }
+      return await window.db.getUsers();
+    } catch (error) {
+      logger.error('Get users error', error);
+      return [];
+    }
+  };
+
+  const createUser = async (userData: { name: string; username: string; password: string; role: UserRole; email?: string }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!window.db) {
+        return { success: false, message: 'Database not available' };
+      }
+      const result = await window.db.createUser(userData);
+      return result;
+    } catch (error) {
+      logger.error('Create user error', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  };
+
+  const updateUser = async (userId: string, userData: { name: string; username: string; role: UserRole; email?: string; password?: string }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!window.db) {
+        return { success: false, message: 'Database not available' };
+      }
+      const result = await window.db.updateUser(userId, userData);
+      return result;
+    } catch (error) {
+      logger.error('Update user error', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  };
+
+  const deleteUser = async (userId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!window.db) {
+        return { success: false, message: 'Database not available' };
+      }
+      const result = await window.db.deleteUser(userId);
+      return result;
+    } catch (error) {
+      logger.error('Delete user error', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
     }
   };
 
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
-      isGuest,
-      user,
-      session,
+      currentUser,
       login,
-      signup,
-      guestLogin,
       logout,
-      canEditAssets,
-      canEditSites,
-      canImportAssets,
-      canAccessSettings
+      hasPermission,
+      getUsers,
+      createUser,
+      updateUser,
+      deleteUser,
     }}>
       {children}
     </AuthContext.Provider>

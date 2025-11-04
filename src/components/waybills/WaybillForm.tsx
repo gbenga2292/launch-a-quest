@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Asset, Waybill, WaybillItem, Site, Employee } from "@/types/asset";
+import { Asset, Waybill, WaybillItem, Site, Employee, Vehicle } from "@/types/asset";
 import { FileText, Plus, Minus, X } from "lucide-react";
 import { logActivity } from "@/utils/activityLogger";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,10 +15,9 @@ interface WaybillFormProps {
   assets: Asset[];
   sites: Site[];
   employees: Employee[];
-  vehicles: string[];
-  onCreateWaybill: (waybill: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  vehicles: Vehicle[];
+  onCreateWaybill: (waybill: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
-  loading?: boolean;
 }
 
 interface WaybillFormData {
@@ -31,19 +30,29 @@ interface WaybillFormData {
   items: WaybillItem[];
 }
 
-export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybill, onCancel, loading = false }: WaybillFormProps) => {
+export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybill, onCancel }: WaybillFormProps) => {
   const { isAuthenticated } = useAuth();
-  const [formData, setFormData] = useState<WaybillFormData>({
-    siteId: '',
-    driverName: '',
-    vehicle: '',
-    expectedReturnDate: '',
-    purpose: '',
-    service: '',
-    items: []
+  const [formData, setFormData] = useState<WaybillFormData>(() => {
+    const activeEmployees = employees.filter(emp => emp.status === 'active');
+    return {
+      siteId: sites.length > 0 ? sites[0].id : '',
+      driverName: activeEmployees.length > 0 ? activeEmployees[0].name : '',
+      vehicle: vehicles.length > 0 ? vehicles[0].name : '',
+      expectedReturnDate: '',
+      purpose: 'For Operational Purpose',
+      service: 'dewatering',
+      items: []
+    };
   });
 
-  const availableAssets = assets.filter(asset => asset.quantity > 0);
+  const availableAssets = assets.filter(asset => {
+    if (asset.siteId) return false; // Only office assets
+    const availableQty = asset.quantity - (asset.reservedQuantity || 0) - (asset.damagedCount || 0) - (asset.missingCount || 0);
+    return availableQty > 0;
+  }).map(asset => ({
+    ...asset,
+    availableQuantity: asset.quantity - (asset.reservedQuantity || 0) - (asset.damagedCount || 0) - (asset.missingCount || 0)
+  }));
 
   const handleAddItem = () => {
     setFormData(prev => ({
@@ -51,7 +60,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
       items: [...prev.items, {
         assetId: '',
         assetName: '',
-        quantity: 1,
+        quantity: 0,
         returnedQuantity: 0,
         status: 'outstanding'
       }]
@@ -64,7 +73,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
   };
 
   const handleItemChange = (index: number, field: keyof WaybillItem, value: any) => {
-    if (field === 'assetId' && isAssetAlreadyAdded(value)) {
+    if (field === 'assetId' && value && isAssetAlreadyAdded(value)) {
       alert('This asset has already been added.');
       return;
     }
@@ -73,19 +82,14 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
       items: prev.items.map((item, i) => {
         if (i === index) {
           if (field === 'assetId') {
-            const asset = assets.find(a => a.id === value);
+            const asset = assets.find(a => String(a.id) === String(value));
+            console.log('Selected asset:', asset);
+            console.log('Available quantity:', asset?.availableQuantity);
             return {
               ...item,
               assetId: value,
-              assetName: asset?.name ?? 'Unknown Asset',
-              quantity: Math.min(item.quantity, asset?.quantity ?? 0)
-            };
-          }
-          // If assetId changes elsewhere, also update assetName
-          if (field === 'assetName') {
-            return {
-              ...item,
-              assetName: value ?? 'Unknown Asset'
+              assetName: asset?.name || '',
+              quantity: 1 // Reset to 1 when changing asset
             };
           }
           return { ...item, [field]: value };
@@ -102,7 +106,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.siteId || !formData.driverName || !formData.service || formData.items.length === 0) {
@@ -111,11 +115,6 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
 
     const waybillData: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'> = {
       ...formData,
-      siteId: formData.siteId ?? '',
-      items: formData.items.map(item => ({
-        ...item,
-        assetName: item.assetName ?? 'Unknown Asset'
-      })),
       issueDate: new Date(),
       expectedReturnDate: formData.expectedReturnDate ? new Date(formData.expectedReturnDate) : undefined,
       status: 'outstanding',
@@ -125,19 +124,20 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
     // Log activity if authenticated
     if (isAuthenticated) {
       logActivity({
-        userId: 'current_user',
         action: 'create',
         entity: 'waybill',
         details: `Created waybill for site ${sites.find(s => s.id === formData.siteId)?.name || formData.siteId} with ${formData.items.length} items`
       });
     }
 
-    await onCreateWaybill(waybillData);
+    onCreateWaybill(waybillData);
   };
 
   const getMaxQuantity = (assetId: string) => {
-    const asset = assets.find(a => a.id === assetId);
-    return asset?.quantity || 0;
+    const asset = assets.find(a => a.id.toString() === assetId);
+    const availableQty = asset?.availableQuantity || 0;
+    console.log('getMaxQuantity for assetId:', assetId, 'result:', availableQty, 'asset:', asset);
+    return availableQty;
   };
 
   return (
@@ -229,9 +229,9 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
                       <SelectValue placeholder="Select a driver" />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees.filter(emp => emp.role === 'driver').map((driver) => (
-                        <SelectItem key={driver.id} value={driver.name}>
-                          {driver.name}
+                      {employees.filter(emp => emp.status === 'active').map((employee) => (
+                        <SelectItem key={employee.id} value={employee.name}>
+                          {employee.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -253,9 +253,9 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
                       <SelectValue placeholder="Select a vehicle" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((vehicle, index) => (
-                        <SelectItem key={index} value={vehicle}>
-                          {vehicle}
+                      {vehicles.map((vehicle) => (
+                        <SelectItem key={vehicle.id} value={vehicle.name}>
+                          {vehicle.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -312,18 +312,18 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
                             <div className="space-y-2">
                               <Label>Asset</Label>
                               <Select
-                                value={item.assetId}
+                                value={item.assetId || ""}
                                 onValueChange={(value) => handleItemChange(index, 'assetId', value)}
                               >
                                 <SelectTrigger className="border-0 bg-background">
-                                  <SelectValue>
+                                  <SelectValue placeholder="Select asset">
                                     {item.assetName || "Select asset"}
                                   </SelectValue>
                                 </SelectTrigger>
-                                <SelectContent>
-                                  {availableAssets.filter(asset => !formData.items.some(item => item.assetId === asset.id)).map((asset) => (
+                                <SelectContent className="bg-background z-50">
+                                  {availableAssets.filter(asset => !formData.items.some((item, idx) => idx !== index && item.assetId === asset.id)).map((asset) => (
                                     <SelectItem key={asset.id} value={asset.id}>
-                                      {asset.name} (Available: {asset.quantity} {asset.unitOfMeasurement})
+                                      {asset.name} (Available: {asset.availableQuantity} {asset.unitOfMeasurement})
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -335,7 +335,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
                               <Input
                                 type="number"
                                 min="1"
-                                max={getMaxQuantity(item.assetId)}
+                                max={item.assetId ? getMaxQuantity(item.assetId) : 999999}
                                 value={item.quantity}
                                 onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
                                 className="border-0 bg-background"
@@ -346,7 +346,7 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
                               <Label>Available Stock</Label>
                               <div className="h-10 flex items-center px-3 bg-background rounded-md border">
                                 <Badge variant="outline">
-                                  {getMaxQuantity(item.assetId)} units
+                                  {item.assetId ? `${getMaxQuantity(item.assetId)} units` : 'Select asset first'}
                                 </Badge>
                               </div>
                             </div>
@@ -383,10 +383,10 @@ export const WaybillForm = ({ assets, sites, employees, vehicles, onCreateWaybil
               <Button
                 type="submit"
                 className="flex-1 bg-gradient-primary hover:scale-105 transition-all duration-300 shadow-medium"
-                disabled={formData.items.length === 0 || loading}
+                disabled={formData.items.length === 0 || availableAssets.length === 0 || formData.items.some(item => !item.assetId || item.quantity <= 0)}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                {loading ? 'Creating...' : 'Create Waybill'}
+                Create Waybill
               </Button>
             </div>
           </form>

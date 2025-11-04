@@ -5,18 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Site, Asset, Employee, Waybill, WaybillItem } from "@/types/asset";
-import { SiteInventoryItem } from "@/hooks/useSiteInventory";
+import { Site, Asset, Employee, Waybill, WaybillItem, Vehicle } from "@/types/asset";
 import { MapPin, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ReturnWaybillFormProps {
   site: Site;
   sites: Site[];
   assets: Asset[];
-  siteInventory?: SiteInventoryItem[];
   employees: Employee[];
-  vehicles: string[];
+  vehicles: Vehicle[];
   initialWaybill?: Waybill;
   isEditMode?: boolean;
   onCreateReturnWaybill: (waybillData: {
@@ -47,7 +46,6 @@ export const ReturnWaybillForm = ({
   site,
   sites,
   assets,
-  siteInventory = [],
   employees,
   vehicles,
   initialWaybill,
@@ -56,20 +54,18 @@ export const ReturnWaybillForm = ({
   onUpdateReturnWaybill,
   onCancel
 }: ReturnWaybillFormProps) => {
-  console.log('Employees in ReturnWaybillForm:', employees);
-  console.log('Vehicles in ReturnWaybillForm:', vehicles);
-  console.log('Site Inventory in ReturnWaybillForm:', siteInventory);
   if (!site) return null;
 
-  const [selectedItems, setSelectedItems] = useState<{ itemId: string; quantity: number }[]>([]);
-  const [driverName, setDriverName] = useState("select-driver");
-  const [vehicle, setVehicle] = useState("select-vehicle");
+  const [selectedItems, setSelectedItems] = useState<{ assetId: string; quantity: number }[]>([]);
+  const [driverName, setDriverName] = useState(() => employees.length > 0 ? employees[0].name : "");
+  const [vehicle, setVehicle] = useState(() => vehicles.length > 0 ? vehicles[0].name : "");
   const [purpose, setPurpose] = useState("Material Return");
   const [service, setService] = useState("dewatering");
 
   const [expectedReturnDate, setExpectedReturnDate] = useState("");
   const [returnToSiteId, setReturnToSiteId] = useState<string | "office">("office");
   const { toast } = useToast();
+  const { currentUser } = useAuth();
 
   // Pre-fill form if editing
   useEffect(() => {
@@ -83,33 +79,33 @@ export const ReturnWaybillForm = ({
 
       // Pre-select items
       const initialSelected = initialWaybill.items.map(item => ({
-        itemId: item.assetId,
+        assetId: item.assetId,
         quantity: item.quantity
       }));
       setSelectedItems(initialSelected);
     }
   }, [initialWaybill, isEditMode]);
 
-  // Get materials at this site from siteInventory
-  const materialsAtSite = siteInventory.filter(item => item.siteId === site.id && item.quantity > 0);
+  // Get assets that are at this site and have quantity > 0
+  const siteAssets = assets.filter(asset => asset.siteQuantities && asset.siteQuantities[site.id] > 0);
 
-  const handleItemToggle = (itemId: string, checked: boolean) => {
+  const handleAssetToggle = (assetId: string, checked: boolean) => {
     if (checked) {
-      const item = materialsAtSite.find(m => m.itemId === itemId);
-      if (item) {
-        setSelectedItems(prev => [...prev, { itemId, quantity: 1 }]);
+      const asset = siteAssets.find(a => a.id === assetId);
+      if (asset) {
+        setSelectedItems(prev => [...prev, { assetId, quantity: 1 }]);
       }
     } else {
-      setSelectedItems(prev => prev.filter(item => item.itemId !== itemId));
+      setSelectedItems(prev => prev.filter(item => item.assetId !== assetId));
     }
   };
 
   // Sites options for return to dropdown (exclude current site)
   const returnToSites = sites.filter(s => s.id !== site.id);
 
-  const handleQuantityChange = (itemId: string, quantity: number) => {
+  const handleQuantityChange = (assetId: string, quantity: number) => {
     setSelectedItems(prev => prev.map(item =>
-      item.itemId === itemId ? { ...item, quantity: Math.max(0, quantity) } : item
+      item.assetId === assetId ? { ...item, quantity: Math.max(0, quantity) } : item
     ));
   };
 
@@ -125,7 +121,7 @@ export const ReturnWaybillForm = ({
       return;
     }
 
-    if (!driverName || driverName === "select-driver" || !vehicle || vehicle === "select-vehicle") {
+    if (!driverName || !vehicle) {
       toast({
         title: "Missing Required Fields",
         description: "Please select a driver and vehicle.",
@@ -136,11 +132,11 @@ export const ReturnWaybillForm = ({
 
     // Validate quantities
     for (const item of selectedItems) {
-      const material = materialsAtSite.find(m => m.itemId === item.itemId);
-      if (!material || item.quantity > material.quantity) {
+      const asset = siteAssets.find(a => a.id === item.assetId);
+      if (!asset || item.quantity > asset.siteQuantities[site.id]) {
         toast({
           title: "Invalid Quantity",
-          description: `Quantity for ${material?.itemName || 'unknown item'} exceeds available stock at site.`,
+          description: `Quantity for ${asset?.name || 'unknown asset'} exceeds available stock.`,
           variant: "destructive",
         });
         return;
@@ -148,12 +144,12 @@ export const ReturnWaybillForm = ({
     }
 
     const waybillItems: WaybillItem[] = selectedItems.map(item => {
-      const material = materialsAtSite.find(m => m.itemId === item.itemId)!;
+      const asset = siteAssets.find(a => a.id === item.assetId)!;
       return {
-        assetId: item.itemId,
-        assetName: material.itemName,
+        assetId: item.assetId,
+        assetName: asset.name,
         quantity: item.quantity,
-        returnedQuantity: isEditMode ? (initialWaybill?.items.find(i => i.assetId === item.itemId)?.returnedQuantity || 0) : 0,
+        returnedQuantity: isEditMode ? (initialWaybill?.items.find(i => i.assetId === item.assetId)?.returnedQuantity || 0) : 0,
         status: 'outstanding'
       };
     });
@@ -194,38 +190,39 @@ export const ReturnWaybillForm = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="driver">Driver *</Label>
-                          <Select value={driverName} onValueChange={setDriverName}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select driver" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="select-driver" disabled>Select Driver</SelectItem>
-                              {employees.map((employee) => (
-                                <SelectItem key={employee.id} value={employee.name}>
-                                  {employee.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-            
-                        <div className="space-y-2">
-                          <Label htmlFor="vehicle">Vehicle *</Label>
-                          <Select value={vehicle} onValueChange={setVehicle}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select vehicle" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="select-vehicle" disabled>Select Vehicle</SelectItem>
-                              {vehicles && vehicles.length > 0 ? (
-                                vehicles.map((vehicleOption, index) => (
-                                  <SelectItem key={index} value={vehicleOption}>
-                                    {vehicleOption}
-                                  </SelectItem>
-                                ))
-                              ) : null}
-                            </SelectContent>
-                          </Select>            </div>
+            <Select value={driverName} onValueChange={setDriverName}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select driver" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.filter(emp => emp.status === 'active').map((employee) => (
+                  <SelectItem key={employee.id} value={employee.name}>
+                    {employee.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="vehicle">Vehicle *</Label>
+              <Select value={vehicle} onValueChange={setVehicle}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vehicles && vehicles.length > 0 ? (
+                    vehicles.map((vehicleOption) => (
+                      <SelectItem key={vehicleOption.id} value={vehicleOption.name}>
+                        {vehicleOption.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-vehicles" disabled>No vehicles available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
         </div>
 
         {/* Purpose, Service, and Return Date */}
@@ -268,45 +265,40 @@ export const ReturnWaybillForm = ({
         <div className="space-y-4">
           <Label className="text-lg font-medium">Select Materials to Return</Label>
 
-          {materialsAtSite.length === 0 ? (
+          {siteAssets.length === 0 ? (
             <div className="text-center py-8">
               <Package className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-muted-foreground">No materials available at this site</p>
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {materialsAtSite.map((material) => {
-                const isSelected = selectedItems.some(item => item.itemId === material.itemId);
-                const selectedQuantity = selectedItems.find(item => item.itemId === material.itemId)?.quantity || 0;
+              {siteAssets.map((asset) => {
+                const isSelected = selectedItems.some(item => item.assetId === asset.id);
+                const selectedQuantity = selectedItems.find(item => item.assetId === asset.id)?.quantity || 0;
 
                 return (
-                  <div key={material.id} className={`flex items-center space-x-4 p-4 border rounded-lg ${isSelected ? 'bg-primary/10' : 'bg-muted/30'}`}>
+                  <div key={asset.id} className={`flex items-center space-x-4 p-4 border rounded-lg ${isSelected ? 'bg-primary/10' : 'bg-muted/30'}`}>
                     <Checkbox
                       checked={isSelected}
-                      onCheckedChange={(checked) => handleItemToggle(material.itemId, checked as boolean)}
+                      onCheckedChange={(checked) => handleAssetToggle(asset.id, checked as boolean)}
                     />
 
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-medium">{material.itemName}</h4>
+                          <h4 className="font-medium">{asset.name}</h4>
                           <p className="text-sm text-muted-foreground">
-                            Available: {material.quantity} {material.unit || ''}
+                            Available: {asset.siteQuantities[site.id]} {asset.unitOfMeasurement}
                           </p>
-                          {material.category && (
-                            <p className="text-xs text-muted-foreground">
-                              Category: {material.category}
-                            </p>
-                          )}
                         </div>
                         {isSelected && (
                           <div className="w-24">
                             <Input
                               type="number"
                               min="1"
-                              max={material.quantity}
+                              max={asset.siteQuantities[site.id]}
                               value={selectedQuantity}
-                              onChange={(e) => handleQuantityChange(material.itemId, parseInt(e.target.value) || 0)}
+                              onChange={(e) => handleQuantityChange(asset.id, parseInt(e.target.value) || 0)}
                               className="text-center"
                             />
                           </div>
@@ -344,13 +336,13 @@ export const ReturnWaybillForm = ({
               <h4 className="font-medium mb-2">Return Summary</h4>
               <div className="space-y-2">
                 {selectedItems.map((item) => {
-                  const material = materialsAtSite.find(m => m.itemId === item.itemId);
+                  const asset = siteAssets.find(a => a.id === item.assetId);
                   return (
-                    <div key={item.itemId} className="flex justify-between items-center text-sm">
-                      <span>{material?.itemName}</span>
+                    <div key={item.assetId} className="flex justify-between items-center text-sm">
+                      <span>{asset?.name}</span>
                       <div className="flex items-center gap-2">
                         <span className="w-16 text-center font-medium">{item.quantity}</span>
-                        <span>{material?.unit || ''}</span>
+                        <span>{asset?.unitOfMeasurement}</span>
                       </div>
                     </div>
                   );
@@ -372,8 +364,10 @@ export const ReturnWaybillForm = ({
           </Button>
           <Button
             type="submit"
-            disabled={selectedItems.length === 0}
+            className="w-full bg-gradient-primary hover:scale-105 transition-all duration-300 shadow-medium"
+            disabled={selectedItems.length === 0 || currentUser?.role === 'staff'}
           >
+            <Package className="h-4 w-4 mr-2" />
             {isEditMode ? "Update Return" : "Create Return"}
           </Button>
         </div>

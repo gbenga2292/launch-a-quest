@@ -12,7 +12,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Waybill, Site } from "@/types/asset";
-import { Search, Eye, RotateCcw, FileText, Trash2, Send, Edit } from "lucide-react";
+import { Search, Eye, RotateCcw, FileText, Trash2, Send, Edit, Calendar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { SendToSiteDialog } from "./SendToSiteDialog";
 
 interface WaybillListProps {
   waybills: Waybill[];
@@ -22,24 +24,21 @@ interface WaybillListProps {
   onInitiateReturn?: (waybill: Waybill) => void;
   onProcessReturn?: (returnData: any) => void;
   onDeleteWaybill?: (waybill: Waybill) => void;
-  onSentToSite?: (waybill: Waybill) => void;
+  onSentToSite?: (waybill: Waybill, sentToSiteDate: Date) => void;
   disableDelete?: boolean;
 }
 
 export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onInitiateReturn, onProcessReturn, onDeleteWaybill, onSentToSite, disableDelete }: WaybillListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [sendToSiteDialogOpen, setSendToSiteDialogOpen] = useState(false);
+  const [selectedWaybill, setSelectedWaybill] = useState<Waybill | null>(null);
+  const { hasPermission, currentUser } = useAuth();
 
-  const filteredWaybills = waybills.filter(waybill => {
-    if (typeof waybill.id !== 'string') {
-      console.log('waybill.id is not a string:', waybill.id);
-      return false;
-    }
-    return (
-      waybill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      waybill.driverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      waybill.vehicle.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  const filteredWaybills = waybills.filter(waybill =>
+    waybill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    waybill.driverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    waybill.vehicle.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const getStatusBadge = (status: Waybill['status']) => {
     switch (status) {
@@ -119,7 +118,7 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
                   <TableHead>Driver</TableHead>
                   <TableHead className="w-[150px]">From</TableHead>
                   <TableHead className="w-[120px]">Vehicle</TableHead>
-                  <TableHead className="w-[120px]">Issue Date</TableHead>
+                  <TableHead className="w-[120px]">Created On</TableHead>
                   <TableHead className="w-[150px]">To</TableHead>
                   <TableHead className="w-[120px]">Status</TableHead>
                   <TableHead className="w-[150px]">Items</TableHead>
@@ -133,7 +132,14 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
                     <TableCell>{waybill.driverName}</TableCell>
                     <TableCell>{getFrom(waybill)}</TableCell>
                     <TableCell>{waybill.vehicle}</TableCell>
-                    <TableCell>{waybill.issueDate.toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div>{waybill.issueDate.toLocaleDateString()}</div>
+                        <div className="text-muted-foreground text-xs">
+                          by {waybill.createdBy || 'Unknown User'}
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell>{getTo(waybill)}</TableCell>
                     <TableCell>{getStatusBadge(waybill.status)}</TableCell>
                     <TableCell className="text-sm max-w-[150px] truncate">
@@ -148,7 +154,7 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {onEditWaybill && waybill.status !== 'sent_to_site' && (
+                      {onEditWaybill && waybill.status !== 'sent_to_site' && hasPermission('write_waybills') && currentUser?.role !== 'staff' && (
                         <Button
                           onClick={() => onEditWaybill(waybill)}
                           variant="ghost"
@@ -158,18 +164,21 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
                           <Edit className="h-4 w-4" />
                         </Button>
                       )}
-                      {waybill.type === 'waybill' && waybill.status === 'outstanding' && onSentToSite && (
+                      {waybill.type === 'waybill' && waybill.status === 'outstanding' && onSentToSite && hasPermission('write_waybills') && (
                         <Button
-                          onClick={() => onSentToSite(waybill)}
+                          onClick={() => {
+                            setSelectedWaybill(waybill);
+                            setSendToSiteDialogOpen(true);
+                          }}
                           variant="outline"
                           size="sm"
                           className="h-8 px-2 bg-blue-500 hover:bg-blue-600 text-white"
                         >
-                          <Send className="h-3 w-3 mr-1" />
+                          <Calendar className="h-3 w-3 mr-1" />
                           Send
                         </Button>
                       )}
-                      {waybill.type === 'return' && waybill.status === 'outstanding' && onProcessReturn && (
+                      {waybill.type === 'return' && waybill.status === 'outstanding' && onProcessReturn && hasPermission('write_returns') && currentUser?.role !== 'staff' && (
                         <Button
                           onClick={() => onProcessReturn({ waybillId: waybill.id, items: waybill.items })}
                           variant="outline"
@@ -180,7 +189,7 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
                           Process
                         </Button>
                       )}
-                      {onDeleteWaybill && waybill.status === 'outstanding' && (
+                      {onDeleteWaybill && waybill.status === 'outstanding' && hasPermission('write_waybills') && currentUser?.role !== 'staff' && (
                         <Button
                           onClick={() => onDeleteWaybill(waybill)}
                           variant="destructive"
@@ -211,6 +220,21 @@ export const WaybillList = ({ waybills, sites, onViewWaybill, onEditWaybill, onI
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Send to Site Dialog */}
+      {selectedWaybill && (
+        <SendToSiteDialog
+          waybill={selectedWaybill}
+          open={sendToSiteDialogOpen}
+          onOpenChange={setSendToSiteDialogOpen}
+          onSend={(waybill, sentToSiteDate) => {
+            if (onSentToSite) {
+              onSentToSite(waybill, sentToSiteDate);
+            }
+            setSelectedWaybill(null);
+          }}
+        />
       )}
     </div>
   );

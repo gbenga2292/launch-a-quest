@@ -1,4 +1,4 @@
- import { useState } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Waybill, Site } from "@/types/asset";
 import { Search, Eye, RotateCcw, FileText, Trash2, Edit } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ReturnsListProps {
   waybills: Waybill[];
@@ -25,18 +26,13 @@ interface ReturnsListProps {
 
 export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onProcessReturn, onDeleteWaybill }: ReturnsListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
+  const { hasPermission } = useAuth();
 
-  const filteredWaybills = waybills.filter(waybill => {
-    if (typeof waybill.id !== 'string') {
-      console.log('waybill.id is not a string:', waybill.id);
-      return false;
-    }
-    return (
-      waybill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      waybill.driverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      waybill.vehicle.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  const filteredWaybills = waybills.filter(waybill =>
+    waybill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    waybill.driverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    waybill.vehicle.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const getStatusBadge = (status: Waybill['status']) => {
     switch (status) {
@@ -106,7 +102,7 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                   <TableHead>Driver</TableHead>
                   <TableHead className="w-[150px]">To</TableHead>
                   <TableHead className="w-[120px]">Vehicle</TableHead>
-                  <TableHead className="w-[120px]">Issue Date</TableHead>
+                  <TableHead className="w-[120px]">Created On</TableHead>
                   <TableHead className="w-[120px]">Return From</TableHead>
                   <TableHead className="w-[120px]">Status</TableHead>
                   <TableHead className="w-[150px]">Items</TableHead>
@@ -120,7 +116,12 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                     <TableCell>{waybill.driverName}</TableCell>
                     <TableCell>{getTo()}</TableCell>
                     <TableCell>{waybill.vehicle}</TableCell>
-                    <TableCell>{waybill.issueDate.toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div>{waybill.issueDate.toLocaleDateString()}</div>
+                        <div className="text-muted-foreground text-xs">{waybill.createdBy || 'Unknown'}</div>
+                      </div>
+                    </TableCell>
                     <TableCell>{getSiteName(waybill.siteId)}</TableCell>
                     <TableCell>{getStatusBadge(waybill.status)}</TableCell>
                     <TableCell className="text-sm max-w-[150px] truncate">
@@ -135,7 +136,7 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {waybill.status === 'outstanding' && onEditWaybill && (
+                      {waybill.status === 'outstanding' && onEditWaybill && hasPermission('write_returns') && (
                         <Button
                           onClick={() => onEditWaybill(waybill)}
                           variant="ghost"
@@ -145,7 +146,7 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                           <Edit className="h-4 w-4" />
                         </Button>
                       )}
-                      {waybill.status === 'outstanding' && onProcessReturn && (
+                      {waybill.status === 'outstanding' && onProcessReturn && hasPermission('write_returns') && (
                         <Button
                           onClick={() => onProcessReturn({ waybillId: waybill.id, items: waybill.items })}
                           variant="outline"
@@ -156,7 +157,7 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                           Process
                         </Button>
                       )}
-                      {onDeleteWaybill && waybill.status === 'outstanding' && (
+                      {onDeleteWaybill && waybill.status === 'outstanding' && hasPermission('delete_returns') && (
                         <Button
                           onClick={() => onDeleteWaybill(waybill)}
                           variant="destructive"

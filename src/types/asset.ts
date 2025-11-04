@@ -2,31 +2,32 @@ export interface Asset {
   id: string;
   name: string;
   description?: string;
-  quantity: number;
-  total_stock: number;  // Total stock purchased (only changes on new purchases)
-  reserved: number;  // Reserved/checked out stock (in waybills)
-  unit: string;  // Unit of measurement (database field)
-  unitOfMeasurement: string;  // Alias for unit
-  category: 'Dewatering' | 'Waterproofing';
+  quantity: number; // Total company inventory - only changes on physical additions/edits
+  reservedQuantity: number; // Reserved for pending waybills
+  availableQuantity: number; // Calculated: quantity - reservedQuantity - sum of siteQuantities
+  siteQuantities: Record<string, number>; // Quantities allocated to specific sites
+  unitOfMeasurement: string;
+  category: 'dewatering' | 'waterproofing';
   type: 'consumable' | 'non-consumable' | 'tools' | 'equipment';
   location?: string;
-  checkoutType?: 'waybill' | 'quick_checkout' | 'reconciled'; // Added to demarcate checkout type
-  checkout_type?: string;  // Database field alias
+  siteId?: string; // Link asset to a specific site
   service?: string; // Service classification for sorting
   status: 'active' | 'damaged' | 'missing' | 'maintenance';
   condition: 'excellent' | 'good' | 'fair' | 'poor';
   missingCount?: number;
   damagedCount?: number;
-  lowStockLevel?: number;
-  low_stock_level?: number;  // Database field alias
-  criticalStockLevel?: number;
-  critical_stock_level?: number;  // Database field alias
+  lowStockLevel: number;
+  criticalStockLevel: number;
   purchaseDate?: Date;
-  cost?: number;
+  cost: number;
+  // Equipment-specific operational details
+  powerSource?: 'fuel' | 'electricity' | 'hybrid' | 'manual';
+  fuelCapacity?: number; // Tank capacity in liters
+  fuelConsumptionRate?: number; // Consumption in liters per 24 hours
+  electricityConsumption?: number; // Power consumption in kW or kWh per day
+  requiresLogging?: boolean; // Whether this equipment requires daily logging
   createdAt: Date;
-  created_at: string;  // Database field alias
   updatedAt: Date;
-  updated_at: string;  // Database field alias
 }
 
 export interface Waybill {
@@ -36,6 +37,7 @@ export interface Waybill {
   driverName: string;
   vehicle: string;
   issueDate: Date;
+  sentToSiteDate?: Date;
   expectedReturnDate?: Date;
   purpose: string;
   service: string;
@@ -44,6 +46,7 @@ export interface Waybill {
   type: 'waybill' | 'return';
   createdAt: Date;
   updatedAt: Date;
+  createdBy?: string;
 }
 
 export interface WaybillItem {
@@ -52,6 +55,11 @@ export interface WaybillItem {
   quantity: number;
   returnedQuantity: number;
   status: 'outstanding' | 'partial_returned' | 'return_completed' | 'lost' | 'damaged';
+  returnBreakdown?: {
+    good: number;
+    damaged: number;
+    missing: number;
+  };
 }
 
 export interface QuickCheckout {
@@ -59,11 +67,12 @@ export interface QuickCheckout {
   assetId: string;
   assetName: string;
   quantity: number;
+  returnedQuantity: number;
   employee: string;
   checkoutDate: Date;
   expectedReturnDays: number;
+  returnDate?: Date;
   status: 'outstanding' | 'return_completed' | 'lost' | 'damaged';
-  siteId?: string; // Optional site for direct site checkout
 }
 
 export interface ReturnBill {
@@ -92,7 +101,7 @@ export interface Site {
   clientName?: string;
   contactPerson?: string;
   phone?: string;
-  services: string[]; // Array of services: dewatering, waterproofing, tiling, sale service and maintenance
+  service?: ('dewatering' | 'waterproofing' | 'tiling' | 'sales' | 'repairs' | 'maintenance')[];
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
@@ -121,6 +130,17 @@ export interface Employee {
   phone?: string;
   email?: string;
   status: 'active' | 'inactive';
+  delistedDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Vehicle {
+  id: string;
+  name: string;
+  type?: string;
+  registration_number?: string;
+  status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -134,7 +154,7 @@ export interface SiteTransaction {
   type: 'in' | 'out'; // 'in' for materials coming to site, 'out' for materials leaving site
   transactionType: 'waybill' | 'return'; // what caused this transaction
   referenceId: string; // waybill id or return id
-  referenceType: 'waybill' | 'return_waybill' | 'quick_checkout';
+  referenceType: 'waybill' | 'return_waybill';
   condition?: 'good' | 'damaged' | 'missing'; // for returns
   notes?: string;
   createdAt: Date;
@@ -143,11 +163,28 @@ export interface SiteTransaction {
 
 export interface Activity {
   id: string;
-  userId: string;
+  userId?: string;
   userName?: string;
   action: 'create' | 'update' | 'delete' | 'process_return' | 'add_site' | 'update_site' | 'delete_site' | 'add_asset' | 'update_asset' | 'delete_asset' | 'add_employee' | 'backup' | 'restore' | 'clear';
   entity: 'waybill' | 'return' | 'site' | 'asset' | 'employee' | 'company_settings' | 'activities' | 'vehicle';
   entityId?: string;
   details?: string;
   timestamp: Date;
+}
+
+export interface EquipmentLog {
+  id: string;
+  equipmentId: string;
+  equipmentName: string;
+  siteId: string;
+  date: Date;
+  active: boolean;
+  downtimeEntries: any[]; // JSON array
+  maintenanceDetails?: string;
+  dieselEntered?: number;
+  supervisorOnSite?: string;
+  clientFeedback?: string;
+  issuesOnSite?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

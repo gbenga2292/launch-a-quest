@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Item as Asset } from "@/services/api";
+import { Asset } from "@/types/asset";
 import { Search, Filter, Edit, Trash2, MoreHorizontal, Package, Save, X, ArrowUpDown } from "lucide-react";
 
 interface AssetListProps {
@@ -22,9 +22,9 @@ interface AssetListProps {
 
 export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<keyof Asset | 'available_stock'>('name');
+  const [filterCategory, setFilterCategory] = useState<'all' | 'dewatering' | 'waterproofing'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'consumable' | 'non-consumable' | 'tools' | 'equipment'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category' | 'type' | 'location' | 'updatedAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingAsset, setEditingAsset] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
@@ -41,30 +41,29 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
   });
 
   const sortedAssets = [...filteredAssets].sort((a, b) => {
-    let aValue: any;
-    let bValue: any;
+    let aValue: any = a[sortBy];
+    let bValue: any = b[sortBy];
 
-    if (sortBy === 'available_stock') {
-      aValue = a.total_stock - a.reserved;
-      bValue = b.total_stock - b.reserved;
+    if (sortBy === 'quantity') {
+      aValue = a.quantity;
+      bValue = b.quantity;
+    } else if (sortBy === 'updatedAt') {
+      aValue = a.updatedAt.getTime();
+      bValue = b.updatedAt.getTime();
     } else {
-        aValue = a[sortBy as keyof Asset];
-        bValue = b[sortBy as keyof Asset];
+      aValue = aValue?.toString().toLowerCase() || '';
+      bValue = bValue?.toString().toLowerCase() || '';
     }
-
-    if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-    if (typeof bValue === 'string') bValue = bValue.toLowerCase();
 
     if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
     if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
     return 0;
   });
 
-  const getStatusBadge = (asset: Asset) => {
-    const availableStock = asset.total_stock - asset.reserved;
-    if (availableStock <= 0) {
+  const getStatusBadge = (quantity: number) => {
+    if (quantity === 0) {
       return <Badge variant="destructive">Out of Stock</Badge>;
-    } else if (asset.low_stock_level && availableStock < asset.low_stock_level) {
+    } else if (quantity < 10) {
       return <Badge className="bg-gradient-warning text-warning-foreground">Low Stock</Badge>;
     } else {
       return <Badge className="bg-gradient-success">In Stock</Badge>;
@@ -79,7 +78,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
       'non-consumable': 'secondary'
     } as const;
     
-    return <Badge variant={variants[type || 'consumable']}>{type}</Badge>;
+    return <Badge variant={variants[type]}>{type}</Badge>;
   };
 
   const handleEditAsset = (asset: Asset) => {
@@ -100,7 +99,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
     setEditForm({});
   };
 
-  const handleSort = (field: keyof Asset | 'available_stock') => {
+  const handleSort = (field: typeof sortBy) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -142,8 +141,8 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Dewatering">Dewatering</SelectItem>
-                  <SelectItem value="Waterproofing">Waterproofing</SelectItem>
+                  <SelectItem value="dewatering">Dewatering</SelectItem>
+                  <SelectItem value="waterproofing">Waterproofing</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -184,21 +183,9 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                     </div>
                   </TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort('total_stock')}>
+                  <TableHead className="cursor-pointer" onClick={() => handleSort('quantity')}>
                     <div className="flex items-center gap-1">
-                      Total Stock
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort('reserved')}>
-                    <div className="flex items-center gap-1">
-                      Reserved
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort('available_stock')}>
-                    <div className="flex items-center gap-1">
-                      Available
+                      Quantity
                       <ArrowUpDown className="h-4 w-4" />
                     </div>
                   </TableHead>
@@ -209,7 +196,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                       <ArrowUpDown className="h-4 w-4" />
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort('updated_at')}>
+                  <TableHead className="cursor-pointer" onClick={() => handleSort('updatedAt')}>
                     <div className="flex items-center gap-1">
                       Last Updated
                       <ArrowUpDown className="h-4 w-4" />
@@ -246,25 +233,17 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                       {editingAsset === asset.id ? (
                         <Input
                           type="number"
-                          value={editForm.total_stock || 0}
-                          onChange={(e) => setEditForm({ ...editForm, total_stock: parseInt(e.target.value) || 0 })}
+                          value={editForm.quantity || 0}
+                          onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) || 0 })}
                           className="h-8 w-20 border-0 bg-background"
                         />
                       ) : (
-                        <span className="font-medium">{asset.total_stock} {asset.unit}</span>
+                        <span className="font-medium">{asset.quantity} {asset.unitOfMeasurement}</span>
                       )}
-                    </TableCell>
-
-                    <TableCell>
-                        <span className="font-medium">{asset.reserved} {asset.unit}</span>
-                    </TableCell>
-
-                    <TableCell>
-                        <span className="font-medium">{asset.total_stock - asset.reserved} {asset.unit}</span>
                     </TableCell>
                     
                     <TableCell>
-                      {getStatusBadge(asset)}
+                      {getStatusBadge(asset.quantity)}
                     </TableCell>
                     
                     <TableCell>
@@ -281,7 +260,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                     
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
-                        {asset.updatedAt ? (typeof asset.updatedAt === 'string' ? new Date(asset.updatedAt).toLocaleDateString() : asset.updatedAt.toLocaleDateString()) : 'N/A'}
+                        {asset.updatedAt instanceof Date ? asset.updatedAt.toLocaleDateString() : new Date(asset.updatedAt).toLocaleDateString()}
                       </span>
                     </TableCell>
                     

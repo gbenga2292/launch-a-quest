@@ -3,6 +3,7 @@ import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Asset } from '@/types/asset';
 import { CompanySettings } from '@/types/asset';
+import { logger } from '@/lib/logger';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -28,7 +29,7 @@ export const generatePDFReport = async (config: ReportConfig): Promise<void> => 
     try {
       doc.addImage(companySettings.logo, 'JPEG', 20, 10, 30, 20);
     } catch (error) {
-      console.warn('Could not add logo to PDF:', error);
+      logger.warn('Could not add logo to PDF', { context: 'PDFGenerator' });
     }
   }
   

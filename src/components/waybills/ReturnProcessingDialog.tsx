@@ -39,8 +39,9 @@ export const ReturnProcessingDialog = ({ waybill, onClose, onSubmit }: ReturnPro
       const cond = conditions[item.assetId];
       if (!cond) return false;
       const total = cond.damaged + cond.missing;
-      // Use the full quantity for validation since we're processing the return
-      if (total > item.quantity) return false;
+      // Validate against remaining quantity that can be returned (total sent minus already returned)
+      const remainingQuantity = item.quantity - (item.returnedQuantity || 0);
+      if (total > remainingQuantity) return false;
     }
     return true;
   };
@@ -52,7 +53,8 @@ export const ReturnProcessingDialog = ({ waybill, onClose, onSubmit }: ReturnPro
     }
     const returnItems: ReturnItem[] = waybill.items.map(item => {
       const cond = conditions[item.assetId];
-      const goodQuantity = item.quantity - (cond.damaged + cond.missing);
+      const remainingQuantity = item.quantity - (item.returnedQuantity || 0);
+      const goodQuantity = remainingQuantity - (cond.damaged + cond.missing);
       return {
         assetId: item.assetId,
         assetName: item.assetName,
@@ -99,7 +101,7 @@ export const ReturnProcessingDialog = ({ waybill, onClose, onSubmit }: ReturnPro
             <thead>
               <tr>
                 <th className="border border-gray-300 p-2 text-left">Item</th>
-                <th className="border border-gray-300 p-2 text-center">Item Quantity</th>
+                <th className="border border-gray-300 p-2 text-center">Remaining Quantity</th>
                 <th className="border border-gray-300 p-2 text-center">Damaged</th>
                 <th className="border border-gray-300 p-2 text-center">Missing</th>
                 <th className="border border-gray-300 p-2 text-center">Good</th>
@@ -114,12 +116,12 @@ export const ReturnProcessingDialog = ({ waybill, onClose, onSubmit }: ReturnPro
                 return (
                   <tr key={item.assetId}>
                     <td className="border border-gray-300 p-2">{item.assetName}</td>
-                    <td className="border border-gray-300 p-2 text-center">{item.quantity}</td>
+                    <td className="border border-gray-300 p-2 text-center">{item.quantity - (item.returnedQuantity || 0)}</td>
                     <td className="border border-gray-300 p-2 text-center">
                       <Input
                         type="number"
                         min={0}
-                        max={item.quantity}
+                        max={item.quantity - (item.returnedQuantity || 0)}
                         value={damaged}
                         onChange={e => handleChange(item.assetId, "damaged", parseInt(e.target.value) || 0)}
                         className="w-20 mx-auto"
@@ -129,7 +131,7 @@ export const ReturnProcessingDialog = ({ waybill, onClose, onSubmit }: ReturnPro
                       <Input
                         type="number"
                         min={0}
-                        max={item.quantity}
+                        max={item.quantity - (item.returnedQuantity || 0)}
                         value={missing}
                         onChange={e => handleChange(item.assetId, "missing", parseInt(e.target.value) || 0)}
                         className="w-20 mx-auto"

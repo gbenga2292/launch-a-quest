@@ -3,20 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Site, Waybill, Asset, Employee } from "@/types/asset";
-import { SiteInventoryItem } from "@/hooks/useSiteInventory";
-import { MapPin, FileText, RotateCcw, Truck, Package, Eye, Trash2, RefreshCw } from "lucide-react";
+import { MapPin, FileText, RotateCcw, Truck, Package, Eye } from "lucide-react";
 
 interface SiteWaybillsProps {
   sites: Site[];
   waybills: Waybill[];
   assets: Asset[];
   employees: Employee[];
-  siteInventory: SiteInventoryItem[];
-  getSiteInventory: (siteId: string) => SiteInventoryItem[];
   onViewWaybill?: (waybill: Waybill) => void;
   onPrepareReturnWaybill: (site: Site) => void;
   onProcessReturn: (site: Site) => void;
-  onReconcileSiteMaterials: (siteId: string) => void;
 }
 
 export const SiteWaybills = ({
@@ -24,15 +20,16 @@ export const SiteWaybills = ({
   waybills,
   assets,
   employees,
-  siteInventory,
-  getSiteInventory,
   onViewWaybill,
   onPrepareReturnWaybill,
-  onProcessReturn,
-  onReconcileSiteMaterials
+  onProcessReturn
 }: SiteWaybillsProps) => {
   const getSiteWaybills = (siteId: string) => {
     return waybills.filter(waybill => waybill.siteId === siteId);
+  };
+
+  const getSiteAssets = (siteId: string) => {
+    return assets.filter(asset => asset.siteId === siteId);
   };
 
   const getOutstandingWaybills = (siteId: string) => {
@@ -59,7 +56,7 @@ export const SiteWaybills = ({
       <div className="grid gap-6">
         {sites.map((site, index) => {
           const siteWaybills = getSiteWaybills(site.id);
-          const siteMaterials = getSiteInventory(site.id);
+          const siteAssets = getSiteAssets(site.id);
           const outstandingWaybills = getOutstandingWaybills(site.id);
           const returnInitiatedWaybills = getReturnInitiatedWaybills(site.id);
 
@@ -104,8 +101,8 @@ export const SiteWaybills = ({
                   </div>
                   <div className="text-center p-3 bg-muted/30 rounded-lg">
                     <FileText className="h-5 w-5 text-green-500 mx-auto mb-1" />
-                    <p className="text-2xl font-bold">{siteMaterials.length}</p>
-                    <p className="text-xs text-muted-foreground">Materials at Site</p>
+                    <p className="text-2xl font-bold">{siteAssets.length}</p>
+                    <p className="text-xs text-muted-foreground">Assets at Site</p>
                   </div>
                 </div>
 
@@ -117,14 +114,6 @@ export const SiteWaybills = ({
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     Prepare Return Waybill
-                  </Button>
-                  <Button
-                    onClick={() => onReconcileSiteMaterials(site.id)}
-                    variant="outline"
-                    className="flex-1 hover:scale-105 transition-all duration-300"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reconcile Materials
                   </Button>
                 </div>
 
@@ -145,7 +134,6 @@ export const SiteWaybills = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              console.log('Viewing waybill from site view:', waybill.id, waybill.type);
                               onViewWaybill?.(waybill);
                             }}
                             className="h-8 w-8 p-0"
@@ -165,27 +153,25 @@ export const SiteWaybills = ({
                   </div>
                 )}
 
-                {/* Materials at Site */}
-                {siteMaterials.length > 0 && (
+                {/* Assets at Site */}
+                {siteAssets.length > 0 && (
                   <div className="mt-6">
                     <h4 className="font-medium mb-3">Materials at Site</h4>
                     <div className="space-y-2">
-                      {siteMaterials.slice(0, 5).map((material) => (
-                        <div key={material.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                          <div className="flex-1">
-                            <p className="font-medium">{material.itemName}</p>
+                      {siteAssets.slice(0, 5).map((asset) => (
+                        <div key={asset.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                          <div>
+                            <p className="font-medium">{asset.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {material.quantity} {material.unit || 'units'}
+                              {asset.quantity} {asset.unitOfMeasurement}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{material.category || 'General'}</Badge>
-                          </div>
+                          <Badge variant="outline">{asset.category}</Badge>
                         </div>
                       ))}
-                      {siteMaterials.length > 5 && (
+                      {siteAssets.length > 5 && (
                         <p className="text-sm text-muted-foreground text-center">
-                          +{siteMaterials.length - 5} more materials
+                          +{siteAssets.length - 5} more materials
                         </p>
                       )}
                     </div>

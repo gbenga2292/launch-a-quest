@@ -11,34 +11,52 @@ import autoTable from "jspdf-autotable";
 interface InventoryReportProps {
   assets: Asset[];
   companySettings?: CompanySettings;
-  className?: string;
 }
 
-export const InventoryReport = ({ assets, companySettings, className }: InventoryReportProps) => {
+const defaultCompanySettings: CompanySettings = {
+  companyName: "Dewatering Construction Etc Limited",
+  logo: "/logo.png",
+  address: "7 Musiliu Smith St, formerly Panti Street, Adekunle, Lagos 101212, Lagos",
+  phone: "+2349030002182",
+  email: "",
+  website: "https://dewaterconstruct.com/",
+  currency: "USD",
+  dateFormat: "MM/dd/yyyy",
+  theme: "light",
+  notifications: {
+    email: true,
+    push: true,
+  },
+};
+
+export const InventoryReport = ({ assets, companySettings }: InventoryReportProps) => {
   const [loading, setLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState("all");
   const [previewData, setPreviewData] = useState<{ assets: Asset[]; title: string } | null>(null);
 
+  // Use provided companySettings or default to company information
+  const effectiveCompanySettings = companySettings || defaultCompanySettings;
+
   const generateReport = (filteredAssets: Asset[], title: string) => {
     setLoading(true);
     const doc = new jsPDF();
 
-    // Add company logo in top left corner if available
-    if (companySettings?.logo) {
+    // Add company logo in top left corner using default company information
+    if (defaultCompanySettings.logo) {
       try {
-        doc.addImage(companySettings.logo, 'PNG', 10, 10, 40, 25);
+        doc.addImage(defaultCompanySettings.logo, 'PNG', 10, 10, 80, 25);
       } catch (e) {
         // Ignore logo errors
       }
     }
 
-    // Company name and title positioned to the right of logo
+    // Company name and title positioned to the right of logo using default company information
     doc.setFont("times", "normal");
     doc.setFontSize(18);
-    doc.text(companySettings?.companyName || "Company", 60, 20);
+    doc.text(defaultCompanySettings.companyName, 100, 20);
     doc.setFontSize(14);
-    doc.text(title, 60, 30);
+    doc.text(title, 100, 30);
 
     const tableData = filteredAssets.map(asset => [
       asset.name,
@@ -55,7 +73,7 @@ export const InventoryReport = ({ assets, companySettings, className }: Inventor
       head: [['Name', 'Quantity', 'Unit', 'Category', 'Type', 'Location', 'Description']],
       body: tableData,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [22, 160, 133] }
+      headStyles: { fillColor: [43, 101, 236] }
     });
 
     doc.save(`${title.replace(/\s+/g, '_').toLowerCase()}.pdf`);
@@ -86,7 +104,7 @@ export const InventoryReport = ({ assets, companySettings, className }: Inventor
 
   return (
     <>
-      <Button variant="outline" className={`gap-2 w-full ${className || ''}`} onClick={() => setIsDialogOpen(true)} disabled={loading}>
+      <Button variant="outline" className="gap-2" onClick={() => setIsDialogOpen(true)} disabled={loading}>
         <FileText className="h-4 w-4" />
         Export Report
       </Button>

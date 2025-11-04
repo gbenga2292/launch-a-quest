@@ -118,7 +118,7 @@ export const ReturnsList = ({ waybills, sites, onViewWaybill, onEditWaybill, onP
                     <TableCell>{waybill.vehicle}</TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        <div>{waybill.issueDate.toLocaleDateString()}</div>
+                        <div>{waybill.issueDate instanceof Date ? waybill.issueDate.toLocaleDateString() : new Date(waybill.issueDate).toLocaleDateString()}</div>
                         <div className="text-muted-foreground text-xs">{waybill.createdBy || 'Unknown'}</div>
                       </div>
                     </TableCell>

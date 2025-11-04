@@ -462,7 +462,7 @@ const createReturnWaybill = async (data) => {
       assetUpdates.set(assetId, existing);
     }
 
-    // Update asset quantities - reduce reserved by total, track damaged/missing separately
+    // Update asset quantities - reduce reserved and site quantities by total, track damaged/missing separately
     for (const [assetId, totals] of assetUpdates.entries()) {
       console.log(`Updating asset ${assetId}: total return=${totals.quantity}, damaged=${totals.damaged}, missing=${totals.missing}`);
       
@@ -482,16 +482,24 @@ const createReturnWaybill = async (data) => {
       const newDamaged = currentDamaged + totals.damaged;
       const newMissing = currentMissing + totals.missing;
       
-      const currentSiteQty = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
-      const totalSiteQty = Object.values(currentSiteQty).reduce((sum, qty) => sum + qty, 0);
+      // Reduce site quantities
+      const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
+      const currentSiteQty = siteQuantities[data.siteId] || 0;
+      siteQuantities[data.siteId] = Math.max(0, currentSiteQty - totals.quantity);
+      if (siteQuantities[data.siteId] === 0) {
+        delete siteQuantities[data.siteId];
+      }
+      
+      const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
       const newAvailable = asset.quantity - newReserved - newDamaged - newMissing - totalSiteQty;
       
-      console.log(`Asset ${assetId}: reserved ${currentReserved} -> ${newReserved}, damaged ${currentDamaged} -> ${newDamaged}, missing ${currentMissing} -> ${newMissing}, available=${newAvailable}`);
+      console.log(`Asset ${assetId}: reserved ${currentReserved} -> ${newReserved}, site qty ${currentSiteQty} -> ${siteQuantities[data.siteId] || 0}, damaged ${currentDamaged} -> ${newDamaged}, missing ${currentMissing} -> ${newMissing}, available=${newAvailable}`);
       
       await trx('assets')
         .where({ id: assetId })
         .update({
           reserved_quantity: newReserved,
+          site_quantities: JSON.stringify(siteQuantities),
           damaged_count: newDamaged,
           missing_count: newMissing,
           available_quantity: newAvailable

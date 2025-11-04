@@ -1006,7 +1006,7 @@ const [equipmentLogs, setEquipmentLogs] = useState<EquipmentLog[]>([]);
     }));
 
     // Process each asset's return
-    Object.entries(returnSummary).forEach(([assetId, summary]) => {
+    Object.entries(returnSummary).forEach(async ([assetId, summary]) => {
       // Update site and office inventory in a single state update
       setAssets(prev => {
         const newAssets = [...prev];
@@ -1088,6 +1088,34 @@ const [equipmentLogs, setEquipmentLogs] = useState<EquipmentLog[]>([]);
 
         return newAssets;
       });
+      
+      // Reload assets from database to ensure consistency
+      setTimeout(async () => {
+        if (window.db) {
+          try {
+            const loadedAssets = await window.db.getAssets();
+            const processedAssets = loadedAssets.map((item: any) => {
+              const asset = {
+                ...item,
+                createdAt: new Date(item.createdAt),
+                updatedAt: new Date(item.updatedAt),
+                siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
+              };
+              if (!asset.siteId) {
+                const reservedQuantity = asset.reservedQuantity || 0;
+                const damagedCount = asset.damagedCount || 0;
+                const missingCount = asset.missingCount || 0;
+                const totalQuantity = asset.quantity;
+                asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
+              }
+              return asset;
+            });
+            setAssets(processedAssets);
+          } catch (error) {
+            logger.error('Failed to refresh assets after return', error);
+          }
+        }
+      }, 500);
     });
 
     // Group return items by assetId to create one transaction per asset showing total qty

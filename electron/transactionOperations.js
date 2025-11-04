@@ -181,7 +181,7 @@ export async function sendToSiteTransaction(db, waybillId) {
 
     console.log('Waybill status updated to sent_to_site');
 
-    // Update assets: REDUCE reserved quantity, ADD to site quantities
+    // Update assets: KEEP reserved quantity, ADD to site quantities
     for (const item of items) {
       const assetId = parseInt(item.assetId);
       const asset = await trx('assets').where({ id: assetId }).first();
@@ -190,9 +190,8 @@ export async function sendToSiteTransaction(db, waybillId) {
         throw new Error(`Asset with ID ${assetId} not found`);
       }
 
-      // CRITICAL: REDUCE reserved quantity (items are no longer reserved, they're at the site)
+      // KEEP reserved quantity unchanged (items stay reserved until returned)
       const currentReserved = asset.reserved_quantity || 0;
-      const newReserved = Math.max(0, currentReserved - item.quantity);
 
       // Add to site quantities
       const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
@@ -201,14 +200,13 @@ export async function sendToSiteTransaction(db, waybillId) {
 
       // Recalculate available (total - reserved - site quantities)
       const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
-      const newAvailable = asset.quantity - newReserved - totalSiteQty;
+      const newAvailable = asset.quantity - currentReserved - totalSiteQty;
 
-      console.log(`Asset ${assetId}: reserved reduced from ${currentReserved} to ${newReserved}, site qty becomes ${siteQuantities[waybill.siteId]}, available=${newAvailable}`);
+      console.log(`Asset ${assetId}: reserved stays at ${currentReserved}, site qty becomes ${siteQuantities[waybill.siteId]}, available=${newAvailable}`);
 
       await trx('assets')
         .where({ id: assetId })
         .update({
-          reserved_quantity: newReserved,
           site_quantities: JSON.stringify(siteQuantities),
           available_quantity: newAvailable
         });

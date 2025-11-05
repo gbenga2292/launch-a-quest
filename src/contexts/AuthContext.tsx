@@ -48,10 +48,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Login now calls the backend through the preload script
+  // Login: Supports two modes
+  // 1. Database authentication (primary) - when Electron database is available
+  // 2. Hardcoded admin fallback (secondary) - for testing without database
   const login = async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      // Hardcoded admin fallback for testing (works without database)
+      // Try database login first if available
+      if (window.db) {
+        const result = await window.db.login(username, password);
+        if (result.success && result.user) {
+          setCurrentUser(result.user);
+          setIsAuthenticated(true);
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('currentUser', JSON.stringify(result.user));
+          return { success: true };
+        }
+        // If database login fails, fall through to hardcoded admin check
+      }
+      
+      // Hardcoded admin fallback (only used if database login fails or unavailable)
       if (username === 'admin' && password === 'admin123') {
         const hardcodedAdmin: User = {
           id: 'admin',
@@ -70,23 +85,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
       
-      // Try database login if available
-      if (window.db) {
-        const result = await window.db.login(username, password);
-        if (result.success && result.user) {
-          setCurrentUser(result.user);
-          setIsAuthenticated(true);
-          // Persist authentication state in localStorage
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('currentUser', JSON.stringify(result.user));
-          return { success: true };
-        } else {
-          return { success: false, message: result.message || 'Invalid credentials' };
-        }
-      }
-      
-      // If no database and not admin, return error
-      return { success: false, message: 'Database not available. Use admin/admin123 to login.' };
+      // If we reach here, credentials were invalid
+      return { success: false, message: 'Invalid credentials' };
     } catch (error) {
       logger.error('Login error', error);
       return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };

@@ -171,3 +171,46 @@ export function transformEquipmentLogToDB(log: any): any {
     issues_on_site: log.issuesOnSite,
   };
 }
+
+/**
+ * Transform waybill data from database format to frontend format
+ */
+export function transformWaybillFromDB(dbWaybill: any): any {
+  return {
+    ...dbWaybill,
+    issueDate: new Date(dbWaybill.issue_date || dbWaybill.issueDate),
+    sentToSiteDate: dbWaybill.sent_to_site_date ? new Date(dbWaybill.sent_to_site_date) : undefined,
+    expectedReturnDate: dbWaybill.expected_return_date ? new Date(dbWaybill.expected_return_date) : undefined,
+    createdAt: new Date(dbWaybill.created_at || dbWaybill.createdAt),
+    updatedAt: new Date(dbWaybill.updated_at || dbWaybill.updatedAt),
+    items: typeof dbWaybill.items === 'string' ? JSON.parse(dbWaybill.items) : dbWaybill.items || [],
+    driverName: dbWaybill.driver_name || dbWaybill.driverName,
+    siteId: dbWaybill.site_id || dbWaybill.siteId,
+    returnToSiteId: dbWaybill.return_to_site_id || dbWaybill.returnToSiteId,
+    createdBy: dbWaybill.created_by || dbWaybill.createdBy,
+  };
+}
+
+/**
+ * Transform waybill data from frontend format to database format
+ */
+export function transformWaybillToDB(waybill: any): any {
+  return {
+    id: waybill.id,
+    items: JSON.stringify(waybill.items || []),
+    site_id: waybill.siteId,
+    driver_name: waybill.driverName,
+    vehicle: waybill.vehicle,
+    issue_date: waybill.issueDate,
+    sent_to_site_date: waybill.sentToSiteDate,
+    expected_return_date: waybill.expectedReturnDate,
+    purpose: waybill.purpose,
+    service: waybill.service,
+    return_to_site_id: waybill.returnToSiteId,
+    status: waybill.status,
+    type: waybill.type,
+    created_at: waybill.createdAt,
+    updated_at: waybill.updatedAt,
+    created_by: waybill.createdBy,
+  };
+}

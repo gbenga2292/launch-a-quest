@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Site, Asset, Employee, Waybill, WaybillItem, Vehicle } from "@/types/asset";
+import { SiteInventoryItem } from "@/types/inventory";
 import { MapPin, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +17,7 @@ interface ReturnWaybillFormProps {
   assets: Asset[];
   employees: Employee[];
   vehicles: Vehicle[];
+  siteInventory: SiteInventoryItem[];
   initialWaybill?: Waybill;
   isEditMode?: boolean;
   onCreateReturnWaybill: (waybillData: {
@@ -48,6 +50,7 @@ export const ReturnWaybillForm = ({
   assets,
   employees,
   vehicles,
+  siteInventory,
   initialWaybill,
   isEditMode = false,
   onCreateReturnWaybill,
@@ -86,13 +89,13 @@ export const ReturnWaybillForm = ({
     }
   }, [initialWaybill, isEditMode]);
 
-  // Get assets that are at this site and have quantity > 0
-  const siteAssets = assets.filter(asset => asset.siteQuantities && asset.siteQuantities[site.id] > 0);
+  // Use siteInventory instead of filtering assets
+  const materialsAtSite = siteInventory;
 
   const handleAssetToggle = (assetId: string, checked: boolean) => {
     if (checked) {
-      const asset = siteAssets.find(a => a.id === assetId);
-      if (asset) {
+      const item = materialsAtSite.find(m => m.assetId === assetId);
+      if (item) {
         setSelectedItems(prev => [...prev, { assetId, quantity: 1 }]);
       }
     } else {
@@ -132,11 +135,11 @@ export const ReturnWaybillForm = ({
 
     // Validate quantities
     for (const item of selectedItems) {
-      const asset = siteAssets.find(a => a.id === item.assetId);
-      if (!asset || item.quantity > asset.siteQuantities[site.id]) {
+      const material = materialsAtSite.find(m => m.assetId === item.assetId);
+      if (!material || item.quantity > material.quantity) {
         toast({
           title: "Invalid Quantity",
-          description: `Quantity for ${asset?.name || 'unknown asset'} exceeds available stock.`,
+          description: `Quantity for ${material?.itemName || 'unknown asset'} exceeds available stock.`,
           variant: "destructive",
         });
         return;
@@ -144,10 +147,10 @@ export const ReturnWaybillForm = ({
     }
 
     const waybillItems: WaybillItem[] = selectedItems.map(item => {
-      const asset = siteAssets.find(a => a.id === item.assetId)!;
+      const material = materialsAtSite.find(m => m.assetId === item.assetId)!;
       return {
         assetId: item.assetId,
-        assetName: asset.name,
+        assetName: material.itemName,
         quantity: item.quantity,
         returnedQuantity: isEditMode ? (initialWaybill?.items.find(i => i.assetId === item.assetId)?.returnedQuantity || 0) : 0,
         status: 'outstanding'
@@ -265,30 +268,30 @@ export const ReturnWaybillForm = ({
         <div className="space-y-4">
           <Label className="text-lg font-medium">Select Materials to Return</Label>
 
-          {siteAssets.length === 0 ? (
+          {materialsAtSite.length === 0 ? (
             <div className="text-center py-8">
               <Package className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-muted-foreground">No materials available at this site</p>
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {siteAssets.map((asset) => {
-                const isSelected = selectedItems.some(item => item.assetId === asset.id);
-                const selectedQuantity = selectedItems.find(item => item.assetId === asset.id)?.quantity || 0;
+              {materialsAtSite.map((material) => {
+                const isSelected = selectedItems.some(item => item.assetId === material.assetId);
+                const selectedQuantity = selectedItems.find(item => item.assetId === material.assetId)?.quantity || 0;
 
                 return (
-                  <div key={asset.id} className={`flex items-center space-x-4 p-4 border rounded-lg ${isSelected ? 'bg-primary/10' : 'bg-muted/30'}`}>
+                  <div key={material.assetId} className={`flex items-center space-x-4 p-4 border rounded-lg ${isSelected ? 'bg-primary/10' : 'bg-muted/30'}`}>
                     <Checkbox
                       checked={isSelected}
-                      onCheckedChange={(checked) => handleAssetToggle(asset.id, checked as boolean)}
+                      onCheckedChange={(checked) => handleAssetToggle(material.assetId, checked as boolean)}
                     />
 
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-medium">{asset.name}</h4>
+                          <h4 className="font-medium">{material.itemName}</h4>
                           <p className="text-sm text-muted-foreground">
-                            Available: {asset.siteQuantities[site.id]} {asset.unitOfMeasurement}
+                            Available: {material.quantity} {material.unit}
                           </p>
                         </div>
                         {isSelected && (
@@ -296,9 +299,9 @@ export const ReturnWaybillForm = ({
                             <Input
                               type="number"
                               min="1"
-                              max={asset.siteQuantities[site.id]}
+                              max={material.quantity}
                               value={selectedQuantity}
-                              onChange={(e) => handleQuantityChange(asset.id, parseInt(e.target.value) || 0)}
+                              onChange={(e) => handleQuantityChange(material.assetId, parseInt(e.target.value) || 0)}
                               className="text-center"
                             />
                           </div>
@@ -336,13 +339,13 @@ export const ReturnWaybillForm = ({
               <h4 className="font-medium mb-2">Return Summary</h4>
               <div className="space-y-2">
                 {selectedItems.map((item) => {
-                  const asset = siteAssets.find(a => a.id === item.assetId);
+                  const material = materialsAtSite.find(m => m.assetId === item.assetId);
                   return (
                     <div key={item.assetId} className="flex justify-between items-center text-sm">
-                      <span>{asset?.name}</span>
+                      <span>{material?.itemName}</span>
                       <div className="flex items-center gap-2">
                         <span className="w-16 text-center font-medium">{item.quantity}</span>
-                        <span>{asset?.unitOfMeasurement}</span>
+                        <span>{material?.unit}</span>
                       </div>
                     </div>
                   );

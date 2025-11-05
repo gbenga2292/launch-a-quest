@@ -8,6 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Asset, Site, Waybill, WaybillItem, CompanySettings, Employee, SiteTransaction, Vehicle } from "@/types/asset";
 import { EquipmentLog } from "@/types/equipment";
+import { SiteInventoryItem } from "@/types/inventory";
 import { MapPin, Plus, Edit, Trash2, MoreVertical, FileText, Package, Activity, Eye } from "lucide-react";
 import { WaybillDocument } from "../waybills/WaybillDocument";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -29,6 +30,8 @@ interface SitesPageProps {
   vehicles: Vehicle[];
   transactions: SiteTransaction[];
   equipmentLogs: EquipmentLog[];
+  siteInventory: SiteInventoryItem[];
+  getSiteInventory: (siteId: string) => SiteInventoryItem[];
   companySettings?: CompanySettings;
   onAddSite: (site: Site) => void;
   onUpdateSite: (site: Site) => void;
@@ -49,7 +52,7 @@ interface SitesPageProps {
   onUpdateEquipmentLog: (log: EquipmentLog) => void;
 }
 
-export const SitesPage = ({ sites, assets, waybills, employees, vehicles, transactions, equipmentLogs, companySettings, onAddSite, onUpdateSite, onDeleteSite, onUpdateAsset, onCreateWaybill, onCreateReturnWaybill, onProcessReturn, onAddEquipmentLog, onUpdateEquipmentLog }: SitesPageProps) => {
+export const SitesPage = ({ sites, assets, waybills, employees, vehicles, transactions, equipmentLogs, siteInventory, getSiteInventory, companySettings, onAddSite, onUpdateSite, onDeleteSite, onUpdateAsset, onCreateWaybill, onCreateReturnWaybill, onProcessReturn, onAddEquipmentLog, onUpdateEquipmentLog }: SitesPageProps) => {
   const [showForm, setShowForm] = useState(false);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
@@ -358,60 +361,29 @@ export const SitesPage = ({ sites, assets, waybills, employees, vehicles, transa
               {/* Materials List */}
               <div>
                 <h3 className="text-lg font-semibold mb-3">Materials at Site</h3>
-                {assets.filter(asset => asset.siteQuantities && asset.siteQuantities[selectedSite.id] > 0).length === 0 ? (
-                  <p className="text-muted-foreground">No materials assigned to this site.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {assets.filter(asset => asset.siteQuantities && asset.siteQuantities[selectedSite.id] > 0).map((asset) => {
-                      const siteQuantity = asset.siteQuantities[selectedSite.id];
-                      // Check if this asset is part of any outstanding waybill for this site
-                      const hasWaybill = waybills.some(waybill =>
-                        waybill.siteId === selectedSite.id &&
-                        waybill.status !== 'return_completed' &&
-                        waybill.items.some(item => item.assetName === asset.name)
-                      );
-
-                      return (
-                        <div key={asset.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                {(() => {
+                  const materialsAtSite = getSiteInventory(selectedSite.id);
+                  return materialsAtSite.length === 0 ? (
+                    <p className="text-muted-foreground">No materials currently at this site.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {materialsAtSite.map((item) => (
+                        <div key={item.assetId} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
                           <div>
-                            <p className="font-medium">{asset.name}</p>
+                            <p className="font-medium">{item.itemName}</p>
                             <p className="text-sm text-muted-foreground">
-                              {siteQuantity} {asset.unitOfMeasurement} • {asset.category}
+                              {item.quantity} {item.unit} • {item.category}
                             </p>
-                            {hasWaybill && (
-                              <p className="text-xs text-orange-600 mt-1">
-                                Part of outstanding waybill
-                              </p>
-                            )}
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Last updated: {new Date(item.lastUpdated).toLocaleDateString()}
+                            </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{asset.type}</Badge>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    onClick={() => handleDeleteAsset(asset)}
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-8 w-8 p-0 ${hasWaybill ? 'text-muted-foreground cursor-not-allowed' : 'text-destructive hover:text-destructive'}`}
-                                    disabled={hasWaybill}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                {hasWaybill && (
-                                  <TooltipContent>
-                                    <p>This asset is part of an outstanding waybill. Use the return process to remove it.</p>
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
+                          <Badge variant="outline">{item.category}</Badge>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Machines Section */}
@@ -506,6 +478,7 @@ export const SitesPage = ({ sites, assets, waybills, employees, vehicles, transa
               assets={assets}
               employees={employees}
               vehicles={vehicles}
+              siteInventory={getSiteInventory(selectedSite.id)}
               onCreateReturnWaybill={onCreateReturnWaybill}
               onCancel={() => setShowReturnWaybillForm(false)}
             />

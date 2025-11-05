@@ -71,11 +71,6 @@ const App = () => {
                     <HashRouter>
                       <Routes>
                         <Route path="/login" element={<Login />} />
-                        <Route path="/dashboard" element={
-                          <ProtectedRoute>
-                            <Index />
-                          </ProtectedRoute>
-                        } />
                         <Route path="/" element={
                           <ProtectedRoute>
                             <Index />

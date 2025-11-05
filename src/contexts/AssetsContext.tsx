@@ -63,6 +63,7 @@ export const AssetsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [loadAssets]);
 
   // Recalculate availableQuantity for all assets
+  // Formula: quantity - reserved - damaged - missing (NOT subtracting siteQuantities)
   useEffect(() => {
     setAssets(prev => prev.map(asset => {
       if (!asset.siteId) {

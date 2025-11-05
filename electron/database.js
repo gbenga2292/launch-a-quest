@@ -185,7 +185,9 @@ import {
   transformEquipmentLogFromDB,
   transformEquipmentLogToDB,
   transformWaybillFromDB,
-  transformWaybillToDB
+  transformWaybillToDB,
+  transformSiteTransactionFromDB,
+  transformSiteTransactionToDB
 } from './dataTransform.js';
 
 const getAssets = () => {
@@ -262,9 +264,10 @@ const deleteWaybill = async (id) => {
         if (asset) {
           const currentReserved = asset.reserved_quantity || 0;
           const newReserved = Math.max(0, currentReserved - item.quantity);
-          const currentSiteQty = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
-          const totalSiteQty = Object.values(currentSiteQty).reduce((sum, qty) => sum + qty, 0);
-          const newAvailable = asset.quantity - newReserved - totalSiteQty;
+          const currentDamaged = asset.damaged_count || 0;
+          const currentMissing = asset.missing_count || 0;
+          // Available = quantity - reserved - damaged - missing
+          const newAvailable = asset.quantity - newReserved - currentDamaged - currentMissing;
           
           console.log(`Asset ${assetId}: unreserving ${item.quantity}, reserved ${currentReserved} -> ${newReserved}`);
           
@@ -289,8 +292,10 @@ const deleteWaybill = async (id) => {
           const currentSiteQty = siteQuantities[waybill.siteId] || 0;
           siteQuantities[waybill.siteId] = Math.max(0, currentSiteQty - item.quantity);
           
-          const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
-          const newAvailable = asset.quantity - currentReserved - totalSiteQty;
+          const currentDamaged = asset.damaged_count || 0;
+          const currentMissing = asset.missing_count || 0;
+          // Available = quantity - reserved - damaged - missing
+          const newAvailable = asset.quantity - currentReserved - currentDamaged - currentMissing;
           
           console.log(`Asset ${assetId}: removing ${item.quantity} from site, site qty ${currentSiteQty} -> ${siteQuantities[waybill.siteId]}`);
           
@@ -363,7 +368,10 @@ const updateCompanySettings = (id, data) => {
   return db('company_settings').where({ id }).update(transformCompanySettingsToDB(data)).returning('*').then(rows => rows.map(transformCompanySettingsFromDB));
 }
 
-const getSiteTransactions = getAll('site_transactions');
+const getSiteTransactions = () => {
+  if (!db) throw new Error('Database not connected');
+  return db('site_transactions').select('*').then(transactions => transactions.map(transformSiteTransactionFromDB));
+};
 const addSiteTransaction = create('site_transactions');
 const updateSiteTransaction = update('site_transactions');
 const deleteSiteTransaction = remove('site_transactions');
@@ -385,11 +393,28 @@ const clearActivities = () => {
 }
 
 
-// --- SEND TO SITE OPERATION ---
+// --- TRANSACTION OPERATIONS ---
+
+// Create waybill with transaction
+const createWaybillWithTransaction = async (waybillData) => {
+  if (!db) throw new Error('Database not connected');
+  
+  const { createWaybillTransaction } = await import('./transactionOperations.js');
+  const result = await createWaybillTransaction(db, waybillData);
+  
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to create waybill');
+  }
+  
+  // Return the created waybill
+  const waybill = await db('waybills').where({ id: result.waybillId }).first();
+  return { success: true, waybill: transformWaybillFromDB(waybill) };
+}
+
+// Send to site with transaction
 const sendToSiteWithTransaction = async (waybillId, sentToSiteDate) => {
   if (!db) throw new Error('Database not connected');
   
-  // Use the transaction operations module for proper send to site
   const { sendToSiteTransaction } = await import('./transactionOperations.js');
   const result = await sendToSiteTransaction(db, waybillId);
   
@@ -405,6 +430,176 @@ const sendToSiteWithTransaction = async (waybillId, sentToSiteDate) => {
   }
   
   return result;
+}
+
+// Process return with transaction
+const processReturnWithTransaction = async (returnData) => {
+  if (!db) throw new Error('Database not connected');
+  
+  const { processReturnTransaction } = await import('./transactionOperations.js');
+  const result = await processReturnTransaction(db, returnData);
+  
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to process return');
+  }
+  
+  return result;
+}
+
+// Delete waybill with transaction
+const deleteWaybillWithTransaction = async (waybillId) => {
+  if (!db) throw new Error('Database not connected');
+  
+  const trx = await db.transaction();
+  try {
+    const waybill = await trx('waybills').where({ id: waybillId }).first();
+    if (!waybill) {
+      throw new Error('Waybill not found');
+    }
+
+    const items = typeof waybill.items === 'string' ? JSON.parse(waybill.items) : waybill.items;
+
+    // Reverse the quantity changes based on waybill status
+    for (const item of items) {
+      const asset = await trx('assets').where({ id: parseInt(item.assetId) }).first();
+      if (!asset) continue;
+
+      if (waybill.status === 'sent_to_site') {
+        // Remove from site quantities and add back to available
+        const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
+        const currentSiteQty = siteQuantities[waybill.siteId] || 0;
+        const newSiteQty = Math.max(0, currentSiteQty - item.quantity);
+        
+        if (newSiteQty === 0) {
+          delete siteQuantities[waybill.siteId];
+        } else {
+          siteQuantities[waybill.siteId] = newSiteQty;
+        }
+
+        const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
+        const newAvailable = asset.quantity - (asset.reserved_quantity || 0) - totalSiteQty;
+
+        await trx('assets')
+          .where({ id: parseInt(item.assetId) })
+          .update({
+            site_quantities: JSON.stringify(siteQuantities),
+            available_quantity: newAvailable
+          });
+
+        // Delete related site transactions
+        await trx('site_transactions')
+          .where({ reference_id: waybillId, reference_type: 'waybill' })
+          .delete();
+      } else if (waybill.status === 'outstanding') {
+        // Remove from reserved quantities
+        const currentReserved = asset.reserved_quantity || 0;
+        const newReserved = Math.max(0, currentReserved - item.quantity);
+        const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
+        const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
+        const newAvailable = asset.quantity - newReserved - totalSiteQty;
+
+        await trx('assets')
+          .where({ id: parseInt(item.assetId) })
+          .update({
+            reserved_quantity: newReserved,
+            available_quantity: newAvailable
+          });
+      }
+    }
+
+    // Delete the waybill
+    await trx('waybills').where({ id: waybillId }).delete();
+
+    await trx.commit();
+    return { success: true };
+  } catch (error) {
+    await trx.rollback();
+    throw error;
+  }
+}
+
+// Update waybill with transaction
+const updateWaybillWithTransaction = async (waybillId, updatedData) => {
+  if (!db) throw new Error('Database not connected');
+  
+  const trx = await db.transaction();
+  try {
+    const existingWaybill = await trx('waybills').where({ id: waybillId }).first();
+    if (!existingWaybill) {
+      throw new Error('Waybill not found');
+    }
+
+    const existingItems = typeof existingWaybill.items === 'string' ? JSON.parse(existingWaybill.items) : existingWaybill.items;
+    const newItems = Array.isArray(updatedData.items) ? updatedData.items : existingItems;
+
+    // Calculate differences in quantities
+    const oldQuantities = new Map();
+    existingItems.forEach(item => {
+      oldQuantities.set(item.assetId, item.quantity);
+    });
+
+    const newQuantities = new Map();
+    newItems.forEach(item => {
+      newQuantities.set(item.assetId, item.quantity);
+    });
+
+    // Update assets based on the differences
+    for (const item of newItems) {
+      const oldQty = oldQuantities.get(item.assetId) || 0;
+      const difference = item.quantity - oldQty;
+
+      if (difference !== 0) {
+        const asset = await trx('assets').where({ id: parseInt(item.assetId) }).first();
+        if (!asset) continue;
+
+        if (existingWaybill.status === 'sent_to_site') {
+          const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
+          const currentSiteQty = siteQuantities[existingWaybill.siteId] || 0;
+          siteQuantities[existingWaybill.siteId] = Math.max(0, currentSiteQty + difference);
+
+          const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
+          const newAvailable = asset.quantity - (asset.reserved_quantity || 0) - totalSiteQty;
+
+          await trx('assets')
+            .where({ id: parseInt(item.assetId) })
+            .update({
+              site_quantities: JSON.stringify(siteQuantities),
+              available_quantity: newAvailable
+            });
+        } else if (existingWaybill.status === 'outstanding') {
+          const currentReserved = asset.reserved_quantity || 0;
+          const newReserved = Math.max(0, currentReserved + difference);
+          const siteQuantities = asset.site_quantities ? JSON.parse(asset.site_quantities) : {};
+          const totalSiteQty = Object.values(siteQuantities).reduce((sum, qty) => sum + qty, 0);
+          const newAvailable = asset.quantity - newReserved - totalSiteQty;
+
+          await trx('assets')
+            .where({ id: parseInt(item.assetId) })
+            .update({
+              reserved_quantity: newReserved,
+              available_quantity: newAvailable
+            });
+        }
+      }
+    }
+
+    // Update the waybill
+    const waybillToUpdate = transformWaybillToDB({
+      ...updatedData,
+      items: newItems,
+      updatedAt: new Date()
+    });
+
+    await trx('waybills')
+      .where({ id: waybillId })
+      .update(waybillToUpdate);
+
+    await trx.commit();
+    return { success: true };
+  } catch (error) {
+    await trx.rollback();
+    throw error;
+  }
 }
 
 const createReturnWaybill = async (data) => {
@@ -582,5 +777,9 @@ export {
     getActivities,
     createActivity,
     clearActivities,
+    createWaybillWithTransaction,
     sendToSiteWithTransaction,
+    processReturnWithTransaction,
+    deleteWaybillWithTransaction,
+    updateWaybillWithTransaction,
 };

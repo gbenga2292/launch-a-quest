@@ -1471,16 +1471,36 @@ const [equipmentLogs, setEquipmentLogs] = useState<EquipmentLog[]>([]);
               return;
             }
             
-            if (window.electronAPI) {
+            if (window.db) {
               try {
-                await window.electronAPI.addEquipmentLog(log);
-                const logs = await window.electronAPI.getEquipmentLogs();
-                setEquipmentLogs(logs);
+                const logData = {
+                  ...log,
+                  equipment_id: log.equipmentId,
+                  equipment_name: log.equipmentName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  active: log.active,
+                  downtime_entries: JSON.stringify(log.downtimeEntries),
+                  maintenance_details: log.maintenanceDetails,
+                  diesel_entered: log.dieselEntered,
+                  supervisor_on_site: log.supervisorOnSite,
+                  client_feedback: log.clientFeedback,
+                  issues_on_site: log.issuesOnSite
+                };
+                await window.db.createEquipmentLog(logData);
+                const logs = await window.db.getEquipmentLogs();
+                setEquipmentLogs(logs.map((item: any) => ({
+                  ...item,
+                  date: new Date(item.date),
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
                 toast({
                   title: "Log Entry Saved",
                   description: "Equipment log has been saved successfully."
                 });
               } catch (error) {
+                console.error('Failed to save equipment log:', error);
                 toast({
                   title: "Error",
                   description: "Failed to save equipment log to database.",
@@ -1505,16 +1525,36 @@ const [equipmentLogs, setEquipmentLogs] = useState<EquipmentLog[]>([]);
               return;
             }
             
-            if (window.electronAPI) {
+            if (window.db) {
               try {
-                await window.electronAPI.updateEquipmentLog(log);
-                const logs = await window.electronAPI.getEquipmentLogs();
-                setEquipmentLogs(logs);
+                const logData = {
+                  ...log,
+                  equipment_id: log.equipmentId,
+                  equipment_name: log.equipmentName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  active: log.active,
+                  downtime_entries: JSON.stringify(log.downtimeEntries),
+                  maintenance_details: log.maintenanceDetails,
+                  diesel_entered: log.dieselEntered,
+                  supervisor_on_site: log.supervisorOnSite,
+                  client_feedback: log.clientFeedback,
+                  issues_on_site: log.issuesOnSite
+                };
+                await window.db.updateEquipmentLog(log.id, logData);
+                const logs = await window.db.getEquipmentLogs();
+                setEquipmentLogs(logs.map((item: any) => ({
+                  ...item,
+                  date: new Date(item.date),
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
                 toast({
                   title: "Log Entry Updated",
                   description: "Equipment log has been updated successfully."
                 });
               } catch (error) {
+                console.error('Failed to update equipment log:', error);
                 toast({
                   title: "Error",
                   description: "Failed to update equipment log in database.",

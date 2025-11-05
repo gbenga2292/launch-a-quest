@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Site, Asset, Employee } from "@/types/asset";
 import { EquipmentLog as EquipmentLogType, DowntimeEntry } from "@/types/equipment";
-import { Wrench, Calendar as CalendarIcon, Plus, Eye, BarChart3, Package } from "lucide-react";
+import { Wrench, Calendar as CalendarIcon, Plus, Eye, BarChart3, Package, ChevronDown } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { SiteMachineAnalytics } from "./SiteMachineAnalytics";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,6 +36,7 @@ export const MachinesSection = ({
   onUpdateEquipmentLog
 }: MachinesSectionProps) => {
   const { hasPermission } = useAuth();
+  const [isOpen, setIsOpen] = useState(true);
   const [showLogDialog, setShowLogDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showAnalyticsDialog, setShowAnalyticsDialog] = useState(false);
@@ -168,12 +170,20 @@ export const MachinesSection = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Wrench className="h-5 w-5" />
-        <h3 className="text-lg font-semibold">Machines</h3>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wrench className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Machines</h3>
+        </div>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
       </div>
 
+      <CollapsibleContent className="space-y-4">
       {siteEquipment.length === 0 ? (
         <p className="text-muted-foreground">No equipment assigned to this dewatering site.</p>
       ) : (
@@ -242,6 +252,7 @@ export const MachinesSection = ({
           ))}
         </div>
       )}
+      </CollapsibleContent>
 
       {/* Calendar Dialog */}
       <Dialog open={showCalendar} onOpenChange={setShowCalendar}>
@@ -687,6 +698,6 @@ export const MachinesSection = ({
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </Collapsible>
   );
 };

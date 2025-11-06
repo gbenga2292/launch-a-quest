@@ -184,6 +184,8 @@ import {
   transformCompanySettingsToDB,
   transformEquipmentLogFromDB,
   transformEquipmentLogToDB,
+  transformConsumableLogFromDB,
+  transformConsumableLogToDB,
   transformWaybillFromDB,
   transformWaybillToDB,
   transformSiteTransactionFromDB,
@@ -358,6 +360,25 @@ const updateEquipmentLog = (id, data) => {
 }
 
 const deleteEquipmentLog = remove('equipment_logs');
+
+// --- CONSUMABLE LOGS ---
+const getConsumableLogs = () => {
+  if (!db) throw new Error('Database not connected');
+  return db('consumable_logs').select('*').then(logs => logs.map(transformConsumableLogFromDB));
+}
+
+const createConsumableLog = (data) => {
+  if (!db) throw new Error('Database not connected');
+  return db('consumable_logs').insert(transformConsumableLogToDB(data)).returning('*').then(rows => rows.map(transformConsumableLogFromDB));
+}
+
+const updateConsumableLog = (id, data) => {
+  if (!db) throw new Error('Database not connected');
+  return db('consumable_logs').where({ id }).update(transformConsumableLogToDB(data)).returning('*').then(rows => rows.map(transformConsumableLogFromDB));
+}
+
+const deleteConsumableLog = remove('consumable_logs');
+
 const getCompanySettings = () => {
   if (!db) throw new Error('Database not connected');
   return db('company_settings').first().then(settings => settings ? transformCompanySettingsFromDB(settings) : null);
@@ -768,6 +789,10 @@ export {
     createEquipmentLog,
     updateEquipmentLog,
     deleteEquipmentLog,
+    getConsumableLogs,
+    createConsumableLog,
+    updateConsumableLog,
+    deleteConsumableLog,
     getCompanySettings,
     updateCompanySettings,
     getSiteTransactions,

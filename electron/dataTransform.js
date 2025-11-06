@@ -19,6 +19,8 @@ export function transformAssetFromDB(dbAsset) {
     requiresLogging: Boolean(dbAsset.requires_logging),
     reservedQuantity: dbAsset.reserved_quantity || 0,
     availableQuantity: dbAsset.available_quantity || 0,
+    damagedCount: dbAsset.damaged_count || 0,
+    missingCount: dbAsset.missing_count || 0,
   };
 }
 

@@ -268,13 +268,1502 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
       if (window.db) {
         try {
           const logs = await window.db.getConsumableLogs();
-          setConsumableLogs(logs);
+          setConsumableLogs(logs.map((item: any) => ({
+            id: item.id,
+            consumableId: item.consumable_id,
+            consumableName: item.consumable_name,
+            siteId: item.site_id,
+            date: new Date(item.date),
+            quantityUsed: item.quantity_used,
+            quantityRemaining: item.quantity_remaining,
+            unit: item.unit,
+            usedFor: item.used_for,
+            usedBy: item.used_by,
+            notes: item.notes,
+            createdAt: new Date(item.created_at),
+            updatedAt: new Date(item.updated_at)
+          })));
         } catch (error) {
           logger.error('Failed to load consumable logs from database', error);
         }
       }
     })();
   }, []);
+
+  // Initialize site inventory hook to track materials at each site
+  const { siteInventory, getSiteInventory } = useSiteInventory(waybills, assets);
+
+
+
+
+  // Recalculate availableQuantity for all assets when assets change
+  useEffect(() => {
+    setAssets(prev => prev.map(asset => {
+      if (!asset.siteId) { // Only for office assets (which track total company stock)
+        const reservedQuantity = asset.reservedQuantity || 0;
+        const damagedCount = asset.damagedCount || 0;
+        const missingCount = asset.missingCount || 0;
+        const totalQuantity = asset.quantity;
+        return {
+          ...asset,
+          availableQuantity: totalQuantity - reservedQuantity - damagedCount - missingCount
+        };
+      }
+      return asset;
+    }));
+  }, [assets.length]); // Only recalculate when assets array length changes, not on every update to avoid loops
+
+
+
+  const handleAddAsset = async (assetData: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to add assets",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if database is available
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode to access the database. Please run the desktop application.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const newAsset: Asset = {
+      ...assetData,
+      id: Date.now().toString(),
+      status: assetData.status || 'active',
+      condition: assetData.condition || 'good',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    try {
+      // Save to database
+      const savedAssets = await window.db.addAsset(newAsset);
+      const savedAsset = savedAssets[0]; // addAsset returns an array
+
+      // Update local state with the saved asset
+      setAssets(prev => [...prev, savedAsset]);
+      setActiveTab("assets");
+
+      toast({
+        title: "Asset Added",
+        description: `${newAsset.name} has been added successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to add asset', error);
+      toast({
+        title: "Error",
+        description: `Failed to add asset: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEditAsset = (asset: Asset) => setEditingAsset(asset);
+
+  const handleDeleteAsset = (asset: Asset) => setDeletingAsset(asset);
+
+  const handleSaveAsset = async (updatedAsset: Asset) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to edit assets",
+        variant: "destructive"
+      });
+      return;
+    }
+    const assetWithUpdatedDate = {
+      ...updatedAsset,
+      availableQuantity: !updatedAsset.siteId ? (updatedAsset.quantity - (updatedAsset.reservedQuantity || 0) - (updatedAsset.damagedCount || 0) - (updatedAsset.missingCount || 0)) : updatedAsset.availableQuantity,
+      updatedAt: new Date()
+    };
+
+    try {
+      // Update in database first
+      if (window.db) {
+        await window.db.updateAsset(updatedAsset.id, assetWithUpdatedDate);
+      }
+
+      // Then update local state
+      setAssets(prev =>
+        prev.map(asset => (asset.id === updatedAsset.id ? assetWithUpdatedDate : asset))
+      );
+      setEditingAsset(null);
+
+      toast({
+        title: "Asset Updated",
+        description: `${assetWithUpdatedDate.name} has been updated successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to update asset in database', error);
+      toast({
+        title: "Error",
+        description: "Failed to update asset in database",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const confirmDeleteAsset = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to delete assets",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (deletingAsset) {
+      try {
+        // Delete from database first
+        await window.db.deleteAsset(deletingAsset.id);
+
+        // Then remove from local state
+        setAssets(prev => prev.filter(asset => asset.id !== deletingAsset.id));
+        setDeletingAsset(null);
+
+        toast({
+          title: "Asset Deleted",
+          description: `${deletingAsset.name} has been deleted successfully`
+        });
+      } catch (error) {
+        logger.error('Failed to delete asset from database', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete asset from database",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleCreateWaybill = async (waybillData: Partial<Waybill>) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to create waybills",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if database is available
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode to access the database. Please run the desktop application.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Generate sequential waybill ID
+    const waybillCount = waybills.filter(wb => wb.type === 'waybill').length + 1;
+    const waybillId = `WB${waybillCount.toString().padStart(3, '0')}`;
+
+    const newWaybill: Waybill = {
+      ...waybillData,
+      id: waybillId,
+      issueDate: waybillData.issueDate || new Date(),
+      status: waybillData.status || 'outstanding',
+      service: waybillData.service || 'dewatering',
+      type: 'waybill',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: currentUser?.name || 'Unknown User',
+      items: (waybillData.items || []).map(item => ({
+        ...item,
+        status: item.status || 'outstanding'
+      }))
+    } as Waybill;
+
+    try {
+      // Save waybill to database
+      await window.db.createWaybill(newWaybill);
+
+      // Update asset reserved quantities when waybill is created
+      for (const item of newWaybill.items) {
+        const asset = assets.find(a => a.id === item.assetId);
+        if (asset) {
+          const newReservedQuantity = (asset.reservedQuantity || 0) + item.quantity;
+          const totalAtSites = assets.filter(a => a.id === asset.id && a.siteId).reduce((sum, a) => sum + a.quantity, 0);
+          const totalQuantity = asset.quantity + totalAtSites;
+          const updatedAsset = {
+            ...asset,
+            reservedQuantity: newReservedQuantity,
+            availableQuantity: totalQuantity - newReservedQuantity - (asset.damagedCount || 0) - (asset.missingCount || 0),
+            updatedAt: new Date()
+          };
+          
+          // Update in database
+          await window.db.updateAsset(asset.id, updatedAsset);
+          
+          // Update local state
+          setAssets(prev => prev.map(a => a.id === asset.id ? updatedAsset : a));
+        }
+      }
+
+      setWaybills(prev => [...prev, newWaybill]);
+      
+      // Trigger assets refresh
+      const loadedAssets = await window.db.getAssets();
+      window.dispatchEvent(new CustomEvent('refreshAssets', { 
+        detail: loadedAssets.map((item: any) => ({
+          ...item,
+          createdAt: new Date(item.createdAt),
+          updatedAt: new Date(item.updatedAt)
+        }))
+      }));
+      
+      setShowWaybillDocument(newWaybill);
+      setActiveTab("waybills");
+
+      toast({
+        title: "Waybill Created",
+        description: `Waybill ${newWaybill.id} created successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to create waybill', error);
+      toast({
+        title: "Error",
+        description: `Failed to create waybill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteWaybill = async (waybill: Waybill) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to delete waybills",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (waybill.type === 'return') {
+      if (waybill.status !== 'outstanding') {
+        toast({
+          title: "Cannot Delete",
+          description: `Processed returns cannot be deleted.`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // For outstanding return waybills: just delete without affecting inventory
+      // since inventory wasn't changed when created
+      try {
+        if (window.db) {
+          await window.db.deleteWaybill(waybill.id);
+        }
+        setWaybills(prev => prev.filter(wb => wb.id !== waybill.id));
+
+        toast({
+          title: "Return Deleted",
+          description: `Return ${waybill.id} deleted successfully.`
+        });
+      } catch (error) {
+        logger.error('Failed to delete return waybill from database', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete return waybill from database",
+          variant: "destructive"
+        });
+      }
+    } else {
+      // For regular waybills: use database transaction to properly revert changes
+      try {
+        if (window.db) {
+          await window.db.deleteWaybillWithTransaction(waybill.id);
+
+          // Reload assets and waybills from database to reflect changes
+          const loadedAssets = await window.db.getAssets();
+          const processedAssets = loadedAssets.map((item: any) => {
+            const asset = {
+              ...item,
+              createdAt: new Date(item.createdAt),
+              updatedAt: new Date(item.updatedAt),
+              siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
+            };
+            // Recalculate availableQuantity on load
+            if (!asset.siteId) {
+              const reservedQuantity = asset.reservedQuantity || 0;
+              const damagedCount = asset.damagedCount || 0;
+              const missingCount = asset.missingCount || 0;
+              const totalQuantity = asset.quantity;
+              asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
+            }
+            return asset;
+          });
+          setAssets(processedAssets);
+
+          const loadedWaybills = await window.db.getWaybills();
+          setWaybills(loadedWaybills.map((item: any) => ({
+            ...item,
+            issueDate: new Date(item.issueDate),
+            expectedReturnDate: item.expectedReturnDate ? new Date(item.expectedReturnDate) : undefined,
+            sentToSiteDate: item.sentToSiteDate ? new Date(item.sentToSiteDate) : undefined,
+            createdAt: new Date(item.createdAt),
+            updatedAt: new Date(item.updatedAt)
+          })));
+        } else {
+          // Fallback to local state updates if no database
+          waybill.items.forEach(item => {
+            setAssets(prev => prev.map(asset => {
+              if (asset.id === item.assetId) {
+                const newReservedQuantity = Math.max(0, (asset.reservedQuantity || 0) - item.quantity);
+                const totalAtSites = prev.filter(a => a.id === asset.id && a.siteId).reduce((sum, a) => sum + a.quantity, 0);
+                const totalQuantity = asset.quantity + totalAtSites;
+                return {
+                  ...asset,
+                  reservedQuantity: newReservedQuantity,
+                  availableQuantity: totalQuantity - newReservedQuantity - (asset.damagedCount || 0) - (asset.missingCount || 0),
+                  updatedAt: new Date()
+                };
+              }
+              return asset;
+            }));
+          });
+
+          setWaybills(prev => prev.filter(wb => wb.id !== waybill.id));
+        }
+
+        toast({
+          title: "Waybill Deleted",
+          description: `Waybill ${waybill.id} deleted successfully`
+        });
+      } catch (error) {
+        logger.error('Failed to delete waybill from database', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete waybill from database",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleSentToSite = async (waybill: Waybill, sentToSiteDate: Date) => {
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "Cannot send waybill to site without database connection.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Call the database transaction to handle all updates
+      const result = await window.db.sendToSiteWithTransaction(
+        waybill.id, 
+        sentToSiteDate.toISOString()
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to send waybill to site');
+      }
+
+      // Reload assets from database to reflect the changes
+      const loadedAssets = await window.db.getAssets();
+      const processedAssets = loadedAssets.map((item: any) => {
+        const asset = {
+          ...item,
+          createdAt: new Date(item.createdAt),
+          updatedAt: new Date(item.updatedAt)
+        };
+        // Recalculate availableQuantity on load
+        if (!asset.siteId) {
+          const reservedQuantity = asset.reservedQuantity || 0;
+          const damagedCount = asset.damagedCount || 0;
+          const missingCount = asset.missingCount || 0;
+          const totalQuantity = asset.quantity;
+          asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
+        }
+        return asset;
+      });
+      setAssets(processedAssets);
+
+      // Reload waybills from database
+      const loadedWaybills = await window.db.getWaybills();
+      setWaybills(loadedWaybills.map((item: any) => ({
+        ...item,
+        issueDate: new Date(item.issueDate),
+        expectedReturnDate: item.expectedReturnDate ? new Date(item.expectedReturnDate) : undefined,
+        sentToSiteDate: item.sentToSiteDate ? new Date(item.sentToSiteDate) : undefined,
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt)
+      })));
+
+      // Reload site transactions from database
+      const loadedTransactions = await window.db.getSiteTransactions();
+      setSiteTransactions(loadedTransactions.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.createdAt)
+      })));
+
+      toast({
+        title: "Waybill Sent to Site",
+        description: `Waybill ${waybill.id} has been sent to site successfully`,
+      });
+    } catch (error) {
+      logger.error('Failed to send waybill to site', error);
+      toast({
+        title: "Error",
+        description: `Failed to send waybill to site: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCreateReturnWaybill = async (waybillData: {
+    siteId: string;
+    returnToSiteId?: string;
+    items: WaybillItem[];
+    driverName: string;
+    vehicle: string;
+    purpose: string;
+    service: string;
+    expectedReturnDate?: Date;
+  }) => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to create return waybills",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if database is available
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode to access the database. Please run the desktop application.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check for existing pending returns or zero stock warnings
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    const currentSiteInventory = getSiteInventory(waybillData.siteId);
+    
+    waybillData.items.forEach(item => {
+      // Check for pending returns
+      const pendingReturns = waybills.filter(wb =>
+        wb.type === 'return' &&
+        wb.status === 'outstanding' &&
+        wb.siteId === waybillData.siteId &&
+        wb.items.some(wbItem => wbItem.assetId === item.assetId)
+      );
+      
+      const pendingQty = pendingReturns.reduce((sum, wb) => {
+        const wbItem = wb.items.find(i => i.assetId === item.assetId);
+        // Only count unreturned quantity (quantity minus what's already returned)
+        const unreturnedQty = (wbItem?.quantity || 0) - (wbItem?.returnedQuantity || 0);
+        return sum + unreturnedQty;
+      }, 0);
+
+      // Get site quantity from siteInventory instead of assets array
+      const siteItem = currentSiteInventory.find(si => si.assetId === item.assetId);
+      const currentSiteQty = siteItem?.quantity || 0;
+      const effectiveAvailable = currentSiteQty - pendingQty;
+
+      if (pendingQty > 0) {
+        warnings.push(`${item.assetName} (${pendingQty} quantity) already has pending return(s) at this site.`);
+      }
+
+      if (effectiveAvailable < item.quantity) {
+        errors.push(`Quantity exceeds what is on site for ${item.assetName}: Only ${effectiveAvailable} effectively available (requested: ${item.quantity}).`);
+      }
+    });
+
+    if (errors.length > 0) {
+      toast({
+        title: "Return Error",
+        description: errors.join(' '),
+        variant: "destructive"
+      });
+      return; // Block creation
+    }
+
+    if (warnings.length > 0) {
+      toast({
+        title: "Return Warning",
+        description: warnings.join(' '),
+        variant: "default"
+      });
+    }
+
+    // Don't generate ID on frontend - let backend handle it to avoid duplicates
+    const newReturnWaybill = {
+      items: waybillData.items.map(item => ({
+        ...item,
+        status: item.status || 'outstanding'
+      })) as WaybillItem[],
+      siteId: waybillData.siteId,
+      returnToSiteId: waybillData.returnToSiteId,
+      driverName: waybillData.driverName,
+      vehicle: waybillData.vehicle,
+      issueDate: new Date(),
+      expectedReturnDate: waybillData.expectedReturnDate,
+      purpose: waybillData.purpose,
+      service: waybillData.service || 'dewatering',
+      status: 'outstanding' as const,
+      type: 'return' as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: currentUser?.name || 'Unknown User'
+    } as Waybill;
+
+    try {
+      // Save return waybill to database (ID will be generated by backend)
+      console.log("Creating return waybill:", newReturnWaybill);
+      const createdWaybill = await window.db.createWaybill(newReturnWaybill);
+
+      if (createdWaybill) {
+        setWaybills(prev => [...prev, createdWaybill]);
+        setShowReturnWaybillDocument(createdWaybill);
+        setActiveTab("returns");
+
+        toast({
+          title: "Return Waybill Created",
+          description: `Return waybill ${createdWaybill.id} created successfully.`
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to create return waybill', error);
+      toast({
+        title: "Error",
+        description: `Failed to create return waybill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUpdateReturnWaybill = (updatedData: {
+    id?: string;
+    siteId: string;
+    returnToSiteId?: string;
+    items: WaybillItem[];
+    driverName: string;
+    vehicle: string;
+    purpose: string;
+    service: string;
+    expectedReturnDate?: Date;
+  }) => {
+    if (!updatedData.id) {
+      toast({
+        title: "Error",
+        description: "Waybill ID is required for update.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setWaybills(prev => prev.map(wb => {
+      if (wb.id === updatedData.id) {
+        // Update items quantities, preserve returnedQuantity and status
+        const updatedItems = wb.items.map(existingItem => {
+          const updatedItem = updatedData.items.find(uItem => uItem.assetId === existingItem.assetId);
+          if (updatedItem) {
+            return {
+              ...existingItem,
+              quantity: updatedItem.quantity,
+              assetName: updatedItem.assetName // in case name changed, but unlikely
+            };
+          }
+          return existingItem;
+        });
+
+        return {
+          ...wb,
+          ...updatedData,
+          items: updatedItems,
+          returnToSiteId: updatedData.returnToSiteId,
+          updatedAt: new Date()
+        };
+      }
+      return wb;
+    }));
+
+    setEditingReturnWaybill(null);
+
+    toast({
+      title: "Return Waybill Updated",
+      description: `Return waybill ${updatedData.id} updated successfully.`
+    });
+  };
+
+  const handleViewWaybill = (waybill: Waybill) => {
+    if (waybill.type === 'return') {
+      setShowReturnWaybillDocument(waybill);
+    } else {
+      setShowWaybillDocument(waybill);
+    }
+  };
+
+  const handleEditWaybill = (waybill: Waybill) => {
+    if (!isAuthenticated) return;
+
+    if (waybill.type === 'return' && waybill.status === 'outstanding') {
+      setEditingReturnWaybill(waybill);
+    } else {
+      setEditingWaybill(waybill);
+    }
+  };
+
+  const handleInitiateReturn = (waybill: Waybill) => {
+    setShowReturnForm(waybill);
+  };
+
+  const handleOpenReturnDialog = (returnData: { waybillId: string; items: WaybillItem[] }) => {
+    const waybill = waybills.find(wb => wb.id === returnData.waybillId);
+    if (waybill) {
+      setProcessingReturnWaybill(waybill);
+    }
+  };
+
+  const handleProcessReturn = async (returnData: { waybillId: string; items: ReturnItem[] }) => {
+    // Get the return waybill to know which site this return is from
+    const returnWaybill = waybills.find(wb => wb.id === returnData.waybillId);
+    const siteId = returnWaybill?.siteId;
+
+    if (!siteId) {
+      toast({
+        title: "Invalid Return",
+        description: "Cannot process return: site information not found.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Get site inventory for validation
+    const currentSiteInventory = getSiteInventory(siteId);
+
+    // Validate against site inventory: Ensure return quantities don't exceed what's available at the site
+    for (const returnItem of returnData.items) {
+      const siteItem = currentSiteInventory.find(si => si.assetId === returnItem.assetId);
+      const currentSiteQty = siteItem?.quantity || 0;
+
+      // Check for pending returns for the same asset from the same site, excluding the current return being processed
+      const pendingReturns = waybills.filter(wb =>
+        wb.type === 'return' &&
+        wb.status === 'outstanding' &&
+        wb.siteId === siteId &&
+        wb.id !== returnData.waybillId && // Exclude the current return waybill
+        wb.items.some(wbItem => wbItem.assetId === returnItem.assetId)
+      );
+      const pendingQty = pendingReturns.reduce((sum, wb) => {
+        const wbItem = wb.items.find(i => i.assetId === returnItem.assetId);
+        // Only count unreturned quantity (quantity minus what's already returned)
+        const unreturnedQty = (wbItem?.quantity || 0) - (wbItem?.returnedQuantity || 0);
+        return sum + unreturnedQty;
+      }, 0);
+
+      const effectiveAvailable = currentSiteQty - pendingQty;
+
+      if (returnItem.quantity > effectiveAvailable) {
+        toast({
+          title: "Invalid Return Quantity",
+          description: `Return quantity (${returnItem.quantity}) exceeds available quantity at site (${effectiveAvailable}) for asset ${returnItem.assetName}. There might be other pending returns.`,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    // Validate against return waybill: Ensure total returned doesn't exceed quantity requested in return waybill
+    for (const returnItem of returnData.items) {
+      if (!returnWaybill) continue;
+
+      const returnWaybillItem = returnWaybill.items.find(item => item.assetId === returnItem.assetId);
+      if (!returnWaybillItem) {
+        toast({
+          title: "Invalid Return",
+          description: `Cannot return item with assetId ${returnItem.assetId} that was not requested in the return waybill.`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const totalReturned = (returnWaybillItem.returnedQuantity || 0) + returnItem.quantity;
+      if (totalReturned > returnWaybillItem.quantity) {
+        toast({
+          title: "Invalid Return Quantity",
+          description: `Return quantity for ${returnItem.assetName} exceeds quantity requested in return waybill (${returnWaybillItem.quantity}). Current returned: ${returnWaybillItem.returnedQuantity || 0}`,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    try {
+      // Use the backend transaction to process the return
+      if (window.db) {
+        const result = await window.db.processReturnWithTransaction(returnData);
+        if (result.success) {
+          toast({
+            title: "Return Processed",
+            description: "Return has been successfully processed.",
+          });
+          
+          // Refresh data from database
+          const [updatedAssets, updatedWaybills] = await Promise.all([
+            window.db.getAssets(),
+            window.db.getWaybills()
+          ]);
+          
+          setAssets(updatedAssets.map(transformAssetFromDB));
+          setWaybills(updatedWaybills.map(transformWaybillFromDB));
+        } else {
+          throw new Error(result.error || 'Failed to process return');
+        }
+      }
+    } catch (error) {
+      console.error('Error processing return:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to process return",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleQuickCheckout = (checkoutData: Omit<QuickCheckout, 'id'>) => {
+    const newCheckout: QuickCheckout = {
+      ...checkoutData,
+      id: Date.now().toString(),
+      returnedQuantity: 0
+    };
+
+    // Reserve the quantity in asset inventory (similar to waybill creation)
+    setAssets(prev => prev.map(asset => {
+      if (asset.id === checkoutData.assetId) {
+        const newReservedQuantity = (asset.reservedQuantity || 0) + checkoutData.quantity;
+        const totalAtSites = prev.filter(a => a.id === asset.id && a.siteId).reduce((sum, a) => sum + a.quantity, 0);
+        const totalQuantity = asset.quantity + totalAtSites;
+        return {
+          ...asset,
+          reservedQuantity: newReservedQuantity,
+          availableQuantity: totalQuantity - newReservedQuantity - (asset.damagedCount || 0) - (asset.missingCount || 0),
+          updatedAt: new Date()
+        };
+      }
+      return asset;
+    }));
+
+    setQuickCheckouts(prev => [...prev, newCheckout]);
+  };
+
+  const handleReturnItem = (checkoutId: string) => {
+    const checkout = quickCheckouts.find(c => c.id === checkoutId);
+    if (!checkout) return;
+
+    // Update checkout status
+    setQuickCheckouts(prev => prev.map(c =>
+      c.id === checkoutId ? { ...c, status: 'return_completed' } : c
+    ));
+
+    // Return quantity to asset
+    setAssets(prev => prev.map(asset =>
+      asset.id === checkout.assetId
+        ? { ...asset, quantity: asset.quantity + checkout.quantity, updatedAt: new Date() }
+        : asset
+    ));
+
+    toast({
+      title: "Item Returned",
+      description: `${checkout.assetName} returned by ${checkout.employee}`
+    });
+  };
+
+  const handlePartialReturn = (checkoutId: string, quantity: number, condition: 'good' | 'damaged' | 'missing') => {
+    const checkout = quickCheckouts.find(c => c.id === checkoutId);
+    if (!checkout) return;
+
+    const newReturnedQuantity = checkout.returnedQuantity + quantity;
+
+    // Validation: Cannot return more than originally borrowed
+    if (newReturnedQuantity > checkout.quantity) {
+      toast({
+        title: "Invalid Return Quantity",
+        description: `Cannot return more than originally borrowed (${checkout.quantity}). Current returned: ${checkout.returnedQuantity}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const isFullyReturned = newReturnedQuantity >= checkout.quantity;
+
+    // Update checkout
+    setQuickCheckouts(prev => prev.map(c =>
+      c.id === checkoutId ? {
+        ...c,
+        returnedQuantity: newReturnedQuantity,
+        status: isFullyReturned ? 'return_completed' : 'outstanding'
+      } : c
+    ));
+
+    // Update asset inventory based on condition
+    setAssets(prev => prev.map(asset => {
+      if (asset.id === checkout.assetId) {
+        const newReservedQuantity = Math.max(0, (asset.reservedQuantity || 0) - quantity);
+        const totalAtSites = prev.filter(a => a.id === asset.id && a.siteId).reduce((sum, a) => sum + a.quantity, 0);
+        const totalQuantity = asset.quantity + totalAtSites;
+        
+        let newDamagedCount = asset.damagedCount || 0;
+        let newMissingCount = asset.missingCount || 0;
+
+        if (condition === 'damaged') {
+          newDamagedCount += quantity;
+        } else if (condition === 'missing') {
+          newMissingCount += quantity;
+        }
+
+        return {
+          ...asset,
+          reservedQuantity: newReservedQuantity,
+          damagedCount: newDamagedCount,
+          missingCount: newMissingCount,
+          availableQuantity: totalQuantity - newReservedQuantity - newDamagedCount - newMissingCount,
+          updatedAt: new Date()
+        };
+      }
+      return asset;
+    }));
+
+    toast({
+      title: "Partial Return Processed",
+      description: `${quantity} ${checkout.assetName} returned in ${condition} condition by ${checkout.employee}`
+    });
+  };
+
+  function renderContent() {
+    switch (activeTab) {
+      case "dashboard":
+        return <Dashboard assets={assets} waybills={waybills} quickCheckouts={quickCheckouts} sites={sites} equipmentLogs={equipmentLogs} />;
+      case "assets":
+        return <AssetTable
+          assets={assets}
+          onEdit={isAuthenticated ? handleEditAsset : undefined}
+          onDelete={isAuthenticated ? handleDeleteAsset : undefined}
+          onUpdateAsset={(updatedAsset) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to update assets",
+                variant: "destructive"
+              });
+              return;
+            }
+            setAssets(prev =>
+              prev.map(asset => (asset.id === updatedAsset.id ? updatedAsset : asset))
+            );
+          }}
+          onViewAnalytics={(asset) => {
+            setSelectedAssetForAnalytics(asset);
+            setShowAnalyticsDialog(true);
+          }}
+        />;
+      case "add-asset":
+        return isAuthenticated ? <AddAssetForm onAddAsset={handleAddAsset} sites={sites} existingAssets={assets} /> : <div>You must be logged in to add assets.</div>;
+      case "create-waybill":
+        return <WaybillForm
+          assets={assets}
+          sites={sites}
+          employees={employees}
+          vehicles={vehicles}
+          onCreateWaybill={handleCreateWaybill}
+          onCancel={() => setActiveTab("dashboard")}
+        />;
+      case "waybills":
+        return (
+          <>
+            <div className="flex flex-col space-y-3 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
+              <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+          {isAuthenticated && hasPermission('write_waybills') && (
+            <Button
+              variant="default"
+              onClick={() => setActiveTab("create-waybill")}
+              className="w-full sm:w-auto bg-gradient-primary"
+              size={isMobile ? "lg" : "default"}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Waybill
+            </Button>
+          )}
+              </div>
+            </div>
+            <WaybillList
+              waybills={waybills.filter(wb => wb.type === 'waybill')}
+              sites={sites}
+              onViewWaybill={handleViewWaybill}
+              onEditWaybill={handleEditWaybill}
+              onInitiateReturn={handleInitiateReturn}
+              onDeleteWaybill={handleDeleteWaybill}
+              onSentToSite={handleSentToSite}
+              disableDelete={false}
+            />
+          </>
+        );
+      case "returns":
+        return <ReturnsList
+          waybills={waybills.filter(wb => wb.type === 'return')}
+          sites={sites}
+          onViewWaybill={(waybill) => {
+            setShowReturnWaybillDocument(waybill);
+          }}
+          onEditWaybill={handleEditWaybill}
+          onDeleteWaybill={handleDeleteWaybill}
+          onProcessReturn={handleOpenReturnDialog}
+        />;
+      case "site-waybills":
+        return <SiteWaybills
+          sites={sites}
+          waybills={waybills}
+          assets={assets}
+          employees={employees}
+          onViewWaybill={handleViewWaybill}
+          onPrepareReturnWaybill={(site) => {
+            setActiveTab("prepare-return-waybill");
+            setSelectedSite(site);
+          }}
+          onProcessReturn={(site) => {
+            // For simplicity, open return form for first outstanding return waybill at site
+            const returnInitiatedWaybill = waybills.find(wb => wb.siteId === site.id && wb.type === 'return' && wb.status === 'outstanding');
+            if (returnInitiatedWaybill) {
+              setShowReturnForm(returnInitiatedWaybill);
+              setActiveTab("returns");
+            }
+          }}
+        />;
+      case "prepare-return-waybill":
+        return selectedSite ? <ReturnWaybillForm
+          site={selectedSite}
+          sites={sites}
+          assets={assets}
+          employees={employees}
+          vehicles={vehicles}
+          siteInventory={getSiteInventory(selectedSite.id)}
+          onCreateReturnWaybill={handleCreateReturnWaybill}
+          onCancel={() => {
+            setActiveTab("site-waybills");
+            setSelectedSite(null);
+          }}
+        /> : null;
+      case "quick-checkout":
+        return <QuickCheckoutForm
+          assets={assets}
+          employees={employees}
+          quickCheckouts={quickCheckouts}
+          onQuickCheckout={handleQuickCheckout}
+          onReturnItem={handleReturnItem}
+          onPartialReturn={handlePartialReturn}
+          onDeleteCheckout={(checkoutId) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to delete checkout items",
+                variant: "destructive"
+              });
+              return;
+            }
+            setQuickCheckouts(prev => prev.filter(c => c.id !== checkoutId));
+            toast({
+              title: "Checkout Deleted",
+              description: `Checkout item deleted successfully`
+            });
+          }}
+        />;
+      case "settings":
+        return (
+          <CompanySettings
+            settings={companySettings}
+            onSave={(settings) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to save company settings",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setCompanySettings(settings);
+            }}
+            employees={employees}
+            onEmployeesChange={(emps) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage employees",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setEmployees(emps);
+            }}
+            vehicles={vehicles}
+            onVehiclesChange={(vehs) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage vehicles",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setVehicles(vehs);
+            }}
+            assets={assets}
+            onAssetsChange={(asts) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage assets",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setAssets(asts);
+            }}
+            waybills={waybills}
+            onWaybillsChange={(wbills) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage waybills",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setWaybills(wbills);
+            }}
+            quickCheckouts={quickCheckouts}
+            onQuickCheckoutsChange={(qcos) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage quick checkouts",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setQuickCheckouts(qcos);
+            }}
+            sites={sites}
+            onSitesChange={(sts) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage sites",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setSites(sts);
+            }}
+            siteTransactions={siteTransactions}
+            onSiteTransactionsChange={(stTrans) => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Authentication Required",
+                  description: "Please login to manage site transactions",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setSiteTransactions(stTrans);
+            }}
+            onResetAllData={handleResetAllData}
+          />
+        );
+      case "sites":
+        return (
+        <SitesPage
+          sites={sites}
+          assets={assets}
+          waybills={waybills}
+          employees={employees}
+          vehicles={vehicles}
+          transactions={siteTransactions}
+          equipmentLogs={equipmentLogs}
+          consumableLogs={consumableLogs}
+          siteInventory={siteInventory}
+          getSiteInventory={getSiteInventory}
+          onAddSite={async site => {
+            if (!isAuthenticated) {
+              toast({
+                title: 'Authentication Required',
+                description: 'Please login to add sites',
+                variant: 'destructive'
+              });
+              return;
+            }
+            try {
+              if (window.db) {
+                await window.db.createSite(site);
+                const loadedSites = await window.db.getSites();
+                setSites(loadedSites.map((item: any) => ({
+                  ...item,
+                  createdAt: new Date(item.createdAt),
+                  updatedAt: new Date(item.updatedAt)
+                })));
+              } else {
+                setSites(prev => [...prev, site]);
+              }
+            } catch (error) {
+              logger.error('Failed to add site', error);
+              toast({ title: 'Error', description: 'Failed to save site to database', variant: 'destructive' });
+            }
+          }}
+          onUpdateSite={async updatedSite => {
+            if (!isAuthenticated) {
+              toast({
+                title: 'Authentication Required',
+                description: 'Please login to update sites',
+                variant: 'destructive'
+              });
+              return;
+            }
+            try {
+              if (window.db) {
+                await window.db.updateSite(updatedSite.id, updatedSite);
+                const loadedSites = await window.db.getSites();
+                setSites(loadedSites.map((item: any) => ({
+                  ...item,
+                  createdAt: new Date(item.createdAt),
+                  updatedAt: new Date(item.updatedAt)
+                })));
+              } else {
+                setSites(prev => prev.map(site => (site.id === updatedSite.id ? updatedSite : site)));
+              }
+            } catch (error) {
+              logger.error('Failed to update site', error);
+              toast({ title: 'Error', description: 'Failed to update site in database', variant: 'destructive' });
+            }
+          }}
+          onDeleteSite={async siteId => {
+            if (!isAuthenticated) {
+              toast({
+                title: 'Authentication Required',
+                description: 'Please login to delete sites',
+                variant: 'destructive'
+              });
+              return;
+            }
+            try {
+              if (window.db) {
+                await window.db.deleteSite(siteId);
+                const loadedSites = await window.db.getSites();
+                setSites(loadedSites.map((item: any) => ({
+                  ...item,
+                  createdAt: new Date(item.createdAt),
+                  updatedAt: new Date(item.updatedAt)
+                })));
+              } else {
+                setSites(prev => prev.filter(site => site.id !== siteId));
+              }
+            } catch (error) {
+              logger.error('Failed to delete site', error);
+              toast({ title: 'Error', description: 'Failed to delete site from database', variant: 'destructive' });
+            }
+          }}
+          onUpdateAsset={(updatedAsset) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to update assets",
+                variant: "destructive"
+              });
+              return;
+            }
+            setAssets(prev => prev.map(asset => (asset.id === updatedAsset.id ? updatedAsset : asset)));
+          }}
+          onCreateWaybill={handleCreateWaybill}
+          onCreateReturnWaybill={handleCreateReturnWaybill}
+          onProcessReturn={(returnData) => {
+            // Check if returnData has siteId and waybill items
+            if (returnData && returnData.waybillId) {
+              handleProcessReturn(returnData);
+            } else {
+              // If no returnData, fallback to previous behavior
+              handleProcessReturn(returnData);
+            }
+          }}
+          onAddEquipmentLog={async (log: EquipmentLog) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to add equipment logs",
+                variant: "destructive"
+              });
+              return;
+            }
+            
+            if (window.db) {
+              try {
+                const logData = {
+                  ...log,
+                  equipment_id: log.equipmentId,
+                  equipment_name: log.equipmentName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  active: log.active,
+                  downtime_entries: JSON.stringify(log.downtimeEntries),
+                  maintenance_details: log.maintenanceDetails,
+                  diesel_entered: log.dieselEntered,
+                  supervisor_on_site: log.supervisorOnSite,
+                  client_feedback: log.clientFeedback,
+                  issues_on_site: log.issuesOnSite
+                };
+                await window.db.createEquipmentLog(logData);
+                const logs = await window.db.getEquipmentLogs();
+                setEquipmentLogs(logs.map((item: any) => ({
+                  id: item.id,
+                  equipmentId: item.equipment_id ? item.equipment_id.toString() : item.equipment_id,
+                  equipmentName: item.equipment_name,
+                  siteId: item.site_id ? item.site_id.toString() : item.site_id,
+                  date: new Date(item.date),
+                  active: item.active,
+                  downtimeEntries: typeof item.downtime_entries === 'string' ? JSON.parse(item.downtime_entries) : item.downtime_entries || [],
+                  maintenanceDetails: item.maintenance_details,
+                  dieselEntered: item.diesel_entered,
+                  supervisorOnSite: item.supervisor_on_site,
+                  clientFeedback: item.client_feedback,
+                  issuesOnSite: item.issues_on_site,
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
+                toast({
+                  title: "Log Entry Saved",
+                  description: "Equipment log has been saved successfully."
+                });
+              } catch (error) {
+                console.error('Failed to save equipment log:', error);
+                toast({
+                  title: "Error",
+                  description: "Failed to save equipment log to database.",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              setEquipmentLogs(prev => [...prev, log]);
+              toast({
+                title: "Log Entry Saved",
+                description: "Equipment log has been saved successfully."
+              });
+            }
+          }}
+          onUpdateEquipmentLog={async (log: EquipmentLog) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to update equipment logs",
+                variant: "destructive"
+              });
+              return;
+            }
+            
+            if (window.db) {
+              try {
+                const logData = {
+                  ...log,
+                  equipment_id: log.equipmentId,
+                  equipment_name: log.equipmentName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  active: log.active,
+                  downtime_entries: JSON.stringify(log.downtimeEntries),
+                  maintenance_details: log.maintenanceDetails,
+                  diesel_entered: log.dieselEntered,
+                  supervisor_on_site: log.supervisorOnSite,
+                  client_feedback: log.clientFeedback,
+                  issues_on_site: log.issuesOnSite
+                };
+                await window.db.updateEquipmentLog(log.id, logData);
+                const logs = await window.db.getEquipmentLogs();
+                setEquipmentLogs(logs.map((item: any) => ({
+                  id: item.id,
+                  equipmentId: item.equipment_id ? item.equipment_id.toString() : item.equipment_id,
+                  equipmentName: item.equipment_name,
+                  siteId: item.site_id ? item.site_id.toString() : item.site_id,
+                  date: new Date(item.date),
+                  active: item.active,
+                  downtimeEntries: typeof item.downtime_entries === 'string' ? JSON.parse(item.downtime_entries) : item.downtime_entries || [],
+                  maintenanceDetails: item.maintenance_details,
+                  dieselEntered: item.diesel_entered,
+                  supervisorOnSite: item.supervisor_on_site,
+                  clientFeedback: item.client_feedback,
+                  issuesOnSite: item.issues_on_site,
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
+                toast({
+                  title: "Log Entry Updated",
+                  description: "Equipment log has been updated successfully."
+                });
+              } catch (error) {
+                console.error('Failed to update equipment log:', error);
+                toast({
+                  title: "Error",
+                  description: "Failed to update equipment log in database.",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              setEquipmentLogs(prev => prev.map(l => l.id === log.id ? log : l));
+              toast({
+                title: "Log Entry Updated",
+                description: "Equipment log has been updated successfully."
+              });
+            }
+          }}
+          onAddConsumableLog={async (log: ConsumableUsageLog) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to add consumable logs",
+                variant: "destructive"
+              });
+              return;
+            }
+            
+            if (window.db) {
+              try {
+                const logData = {
+                  ...log,
+                  consumable_id: log.consumableId,
+                  consumable_name: log.consumableName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  quantity_used: log.quantityUsed,
+                  quantity_remaining: log.quantityRemaining,
+                  unit: log.unit,
+                  used_for: log.usedFor,
+                  used_by: log.usedBy,
+                  notes: log.notes
+                };
+                await window.db.createConsumableLog(logData);
+                const logs = await window.db.getConsumableLogs();
+                setConsumableLogs(logs.map((item: any) => ({
+                  id: item.id,
+                  consumableId: item.consumable_id,
+                  consumableName: item.consumable_name,
+                  siteId: item.site_id,
+                  date: new Date(item.date),
+                  quantityUsed: item.quantity_used,
+                  quantityRemaining: item.quantity_remaining,
+                  unit: item.unit,
+                  usedFor: item.used_for,
+                  usedBy: item.used_by,
+                  notes: item.notes,
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
+                
+                // Update asset siteQuantities to reflect consumption
+                const asset = assets.find(a => a.id === log.consumableId);
+                if (asset && asset.siteQuantities) {
+                  const updatedSiteQuantities = {
+                    ...asset.siteQuantities,
+                    [log.siteId]: log.quantityRemaining
+                  };
+                  const updatedAsset = {
+                    ...asset,
+                    siteQuantities: updatedSiteQuantities,
+                    updatedAt: new Date()
+                  };
+                  await window.db.updateAsset(asset.id, {
+                    site_quantities: JSON.stringify(updatedSiteQuantities),
+                    updated_at: new Date().toISOString()
+                  });
+                  setAssets(prev => prev.map(a => a.id === asset.id ? updatedAsset : a));
+                }
+              } catch (error) {
+                console.error('Failed to save consumable log:', error);
+                toast({
+                  title: "Error",
+                  description: "Failed to save consumable log to database.",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              setConsumableLogs(prev => [...prev, log]);
+            }
+          }}
+          onUpdateConsumableLog={async (log: ConsumableUsageLog) => {
+            if (!isAuthenticated) {
+              toast({
+                title: "Authentication Required",
+                description: "Please login to update consumable logs",
+                variant: "destructive"
+              });
+              return;
+            }
+            
+            if (window.db) {
+              try {
+                const logData = {
+                  ...log,
+                  consumable_id: log.consumableId,
+                  consumable_name: log.consumableName,
+                  site_id: log.siteId,
+                  date: log.date.toISOString(),
+                  quantity_used: log.quantityUsed,
+                  quantity_remaining: log.quantityRemaining,
+                  unit: log.unit,
+                  used_for: log.usedFor,
+                  used_by: log.usedBy,
+                  notes: log.notes
+                };
+                await window.db.updateConsumableLog(log.id, logData);
+                const logs = await window.db.getConsumableLogs();
+                setConsumableLogs(logs.map((item: any) => ({
+                  id: item.id,
+                  consumableId: item.consumable_id,
+                  consumableName: item.consumable_name,
+                  siteId: item.site_id,
+                  date: new Date(item.date),
+                  quantityUsed: item.quantity_used,
+                  quantityRemaining: item.quantity_remaining,
+                  unit: item.unit,
+                  usedFor: item.used_for,
+                  usedBy: item.used_by,
+                  notes: item.notes,
+                  createdAt: new Date(item.created_at),
+                  updatedAt: new Date(item.updated_at)
+                })));
+              } catch (error) {
+                console.error('Failed to update consumable log:', error);
+                toast({
+                  title: "Error",
+                  description: "Failed to update consumable log in database.",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              setConsumableLogs(prev => prev.map(l => l.id === log.id ? log : l));
+            }
+          }}
+        />
+        );
+      default:
+        return <Dashboard assets={assets} waybills={waybills} quickCheckouts={quickCheckouts} sites={sites} equipmentLogs={equipmentLogs} />;
+    }
+  }
 
   // Update handleImport to map imported data to Asset type and save to database
   const handleImport = async (importedAssets: any[]) => {
@@ -423,509 +1912,7 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
     setCompanySettings({} as CompanySettingsType);
   };
 
-  // Use site inventory hook
-  const { getSiteInventory } = useSiteInventory(waybills, assets);
 
-  const handleSaveAsset = async (updatedAsset: Asset) => {
-    try {
-      if (window.db) {
-        await window.db.updateAsset(updatedAsset.id, {
-          ...updatedAsset,
-          site_quantities: JSON.stringify(updatedAsset.siteQuantities || {}),
-          updated_at: new Date().toISOString()
-        });
-      }
-      setAssets(prev => prev.map(a => a.id === updatedAsset.id ? updatedAsset : a));
-      setEditingAsset(null);
-      toast({
-        title: "Asset Updated",
-        description: `${updatedAsset.name} has been updated successfully`
-      });
-    } catch (error) {
-      logger.error('Failed to update asset', error);
-      toast({
-        title: "Error",
-        description: "Failed to update asset",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const confirmDeleteAsset = async () => {
-    if (!deletingAsset) return;
-    try {
-      if (window.db) {
-        await window.db.deleteAsset(deletingAsset.id);
-      }
-      setAssets(prev => prev.filter(a => a.id !== deletingAsset.id));
-      toast({
-        title: "Asset Deleted",
-        description: `${deletingAsset.name} has been deleted successfully`
-      });
-      setDeletingAsset(null);
-    } catch (error) {
-      logger.error('Failed to delete asset', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete asset",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleProcessReturn = async (returnData: any) => {
-    if (!window.db) {
-      toast({
-        title: "Database Not Available",
-        description: "This app needs to run in Electron mode",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      await window.db.processReturnWithTransaction(returnData);
-      
-      // Reload assets and waybills
-      const loadedAssets = await window.db.getAssets();
-      const processedAssets = loadedAssets.map((item: any) => {
-        const asset = {
-          ...item,
-          createdAt: new Date(item.createdAt),
-          updatedAt: new Date(item.updatedAt),
-          siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
-        };
-        if (!asset.siteId) {
-          const reservedQuantity = asset.reservedQuantity || 0;
-          const damagedCount = asset.damagedCount || 0;
-          const missingCount = asset.missingCount || 0;
-          const totalQuantity = asset.quantity;
-          asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
-        }
-        return asset;
-      });
-      setAssets(processedAssets);
-
-      const loadedWaybills = await window.db.getWaybills();
-      setWaybills(loadedWaybills.map((item: any) => ({
-        ...item,
-        issueDate: new Date(item.issueDate),
-        expectedReturnDate: item.expectedReturnDate ? new Date(item.expectedReturnDate) : undefined,
-        sentToSiteDate: item.sentToSiteDate ? new Date(item.sentToSiteDate) : undefined,
-        createdAt: new Date(item.createdAt),
-        updatedAt: new Date(item.updatedAt)
-      })));
-
-      setShowReturnForm(null);
-      toast({
-        title: "Return Processed",
-        description: "Return has been processed successfully"
-      });
-    } catch (error) {
-      logger.error('Failed to process return', error);
-      toast({
-        title: "Error",
-        description: `Failed to process return: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleCreateReturnWaybill = async (waybillData: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!window.db) {
-      toast({
-        title: "Database Not Available",
-        description: "This app needs to run in Electron mode",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const result = await window.db.createWaybill(waybillData);
-      const newWaybill = {
-        ...result.waybill,
-        issueDate: new Date(result.waybill.issueDate),
-        expectedReturnDate: result.waybill.expectedReturnDate ? new Date(result.waybill.expectedReturnDate) : undefined,
-        sentToSiteDate: result.waybill.sentToSiteDate ? new Date(result.waybill.sentToSiteDate) : undefined,
-        createdAt: new Date(result.waybill.createdAt),
-        updatedAt: new Date(result.waybill.updatedAt)
-      };
-      
-      setWaybills(prev => [...prev, newWaybill]);
-      
-      // Reload assets to reflect updated quantities
-      const loadedAssets = await window.db.getAssets();
-      const processedAssets = loadedAssets.map((item: any) => {
-        const asset = {
-          ...item,
-          createdAt: new Date(item.createdAt),
-          updatedAt: new Date(item.updatedAt),
-          siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
-        };
-        if (!asset.siteId) {
-          const reservedQuantity = asset.reservedQuantity || 0;
-          const damagedCount = asset.damagedCount || 0;
-          const missingCount = asset.missingCount || 0;
-          const totalQuantity = asset.quantity;
-          asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
-        }
-        return asset;
-      });
-      setAssets(processedAssets);
-      
-      toast({
-        title: "Return Waybill Created",
-        description: `Return waybill ${newWaybill.id} created successfully`
-      });
-    } catch (error) {
-      logger.error('Failed to create return waybill', error);
-      toast({
-        title: "Error",
-        description: `Failed to create return waybill: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleUpdateReturnWaybill = async (updatedWaybill: Waybill) => {
-    if (!window.db) {
-      toast({
-        title: "Database Not Available",
-        description: "This app needs to run in Electron mode",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      await window.db.updateWaybill(updatedWaybill.id, {
-        ...updatedWaybill,
-        issue_date: updatedWaybill.issueDate.toISOString(),
-        expected_return_date: updatedWaybill.expectedReturnDate?.toISOString(),
-        sent_to_site_date: updatedWaybill.sentToSiteDate?.toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      
-      setWaybills(prev => prev.map(w => w.id === updatedWaybill.id ? updatedWaybill : w));
-      
-      // Reload assets
-      const loadedAssets = await window.db.getAssets();
-      const processedAssets = loadedAssets.map((item: any) => {
-        const asset = {
-          ...item,
-          createdAt: new Date(item.createdAt),
-          updatedAt: new Date(item.updatedAt),
-          siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
-        };
-        if (!asset.siteId) {
-          const reservedQuantity = asset.reservedQuantity || 0;
-          const damagedCount = asset.damagedCount || 0;
-          const missingCount = asset.missingCount || 0;
-          const totalQuantity = asset.quantity;
-          asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
-        }
-        return asset;
-      });
-      setAssets(processedAssets);
-      
-      setEditingReturnWaybill(null);
-      toast({
-        title: "Return Waybill Updated",
-        description: `Return waybill ${updatedWaybill.id} updated successfully`
-      });
-    } catch (error) {
-      logger.error('Failed to update return waybill', error);
-      toast({
-        title: "Error",
-        description: `Failed to update return waybill: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case "dashboard":
-        return <Dashboard assets={assets} waybills={waybills} quickCheckouts={quickCheckouts} sites={sites} equipmentLogs={equipmentLogs} />;
-      case "assets":
-        return (
-          <AssetTable
-            assets={assets}
-            onEdit={(asset) => setEditingAsset(asset)}
-            onDelete={(asset) => setDeletingAsset(asset)}
-            onUpdateAsset={handleSaveAsset}
-            onViewAnalytics={(asset) => {
-              setSelectedAssetForAnalytics(asset);
-              setShowAnalyticsDialog(true);
-            }}
-          />
-        );
-      case "add-asset":
-        return (
-          <AddAssetForm
-            onSave={handleSaveAsset}
-            onCancel={() => setActiveTab("assets")}
-            sites={sites}
-            existingAssets={assets}
-          />
-        );
-      case "waybills":
-        return (
-          <WaybillList
-            waybills={waybills.filter(w => w.type === 'waybill')}
-            sites={sites}
-            onEdit={(waybill) => setEditingWaybill(waybill)}
-            onViewDocument={(waybill) => setShowWaybillDocument(waybill)}
-            onProcessReturn={(waybill) => setShowReturnForm(waybill)}
-          />
-        );
-      case "returns":
-        return (
-          <ReturnsList
-            waybills={waybills}
-            sites={sites}
-            onEdit={(waybill) => setEditingReturnWaybill(waybill)}
-          />
-        );
-      case "sites":
-        return (
-          <SitesPage
-            sites={sites}
-            assets={assets}
-            waybills={waybills}
-            transactions={siteTransactions}
-            employees={employees}
-            vehicles={vehicles}
-            equipmentLogs={equipmentLogs}
-            consumableLogs={consumableLogs}
-            onUpdateEquipmentLog={async (log: EquipmentLog) => {
-              if (!isAuthenticated) {
-                toast({
-                  title: "Authentication Required",
-                  description: "Please login to create equipment logs",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              if (window.db) {
-                try {
-                  const logData = {
-                    ...log,
-                    equipment_id: log.equipmentId,
-                    equipment_name: log.equipmentName,
-                    site_id: log.siteId,
-                    date: log.date.toISOString(),
-                    downtime_entries: JSON.stringify(log.downtimeEntries),
-                    maintenance_details: log.maintenanceDetails,
-                    diesel_entered: log.dieselEntered,
-                    supervisor_on_site: log.supervisorOnSite,
-                    client_feedback: log.clientFeedback,
-                    issues_on_site: log.issuesOnSite
-                  };
-                  await window.db.createEquipmentLog(logData);
-                  const logs = await window.db.getEquipmentLogs();
-                  setEquipmentLogs(logs.map((item: any) => ({
-                    id: item.id,
-                    equipmentId: item.equipment_id ? item.equipment_id.toString() : item.equipment_id,
-                    equipmentName: item.equipment_name,
-                    siteId: item.site_id ? item.site_id.toString() : item.site_id,
-                    date: new Date(item.date),
-                    active: item.active,
-                    downtimeEntries: typeof item.downtime_entries === 'string' ? JSON.parse(item.downtime_entries) : item.downtime_entries || [],
-                    maintenanceDetails: item.maintenance_details,
-                    dieselEntered: item.diesel_entered,
-                    supervisorOnSite: item.supervisor_on_site,
-                    clientFeedback: item.client_feedback,
-                    issuesOnSite: item.issues_on_site,
-                    createdAt: new Date(item.created_at),
-                    updatedAt: new Date(item.updated_at)
-                  })));
-                } catch (error) {
-                  console.error('Failed to save equipment log:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to save equipment log to database.",
-                    variant: "destructive"
-                  });
-                }
-              } else {
-                setEquipmentLogs(prev => [...prev, { ...log, id: Date.now().toString(), createdAt: new Date(), updatedAt: new Date() }]);
-              }
-            }}
-            onUpdateEquipmentLog={async (log: EquipmentLog) => {
-              if (!isAuthenticated) {
-                toast({
-                  title: "Authentication Required",
-                  description: "Please login to update equipment logs",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              if (window.db) {
-                try {
-                  const logData = {
-                    ...log,
-                    equipment_id: log.equipmentId,
-                    equipment_name: log.equipmentName,
-                    site_id: log.siteId,
-                    date: log.date.toISOString(),
-                    downtime_entries: JSON.stringify(log.downtimeEntries),
-                    maintenance_details: log.maintenanceDetails,
-                    diesel_entered: log.dieselEntered,
-                    supervisor_on_site: log.supervisorOnSite,
-                    client_feedback: log.clientFeedback,
-                    issues_on_site: log.issuesOnSite
-                  };
-                  await window.db.updateEquipmentLog(log.id, logData);
-                  const logs = await window.db.getEquipmentLogs();
-                  setEquipmentLogs(logs.map((item: any) => ({
-                    id: item.id,
-                    equipmentId: item.equipment_id ? item.equipment_id.toString() : item.equipment_id,
-                    equipmentName: item.equipment_name,
-                    siteId: item.site_id ? item.site_id.toString() : item.site_id,
-                    date: new Date(item.date),
-                    active: item.active,
-                    downtimeEntries: typeof item.downtime_entries === 'string' ? JSON.parse(item.downtime_entries) : item.downtime_entries || [],
-                    maintenanceDetails: item.maintenance_details,
-                    dieselEntered: item.diesel_entered,
-                    supervisorOnSite: item.supervisor_on_site,
-                    clientFeedback: item.client_feedback,
-                    issuesOnSite: item.issues_on_site,
-                    createdAt: new Date(item.created_at),
-                    updatedAt: new Date(item.updated_at)
-                  })));
-                } catch (error) {
-                  console.error('Failed to update equipment log:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to update equipment log in database.",
-                    variant: "destructive"
-                  });
-                }
-              } else {
-                setEquipmentLogs(prev => prev.map(l => l.id === log.id ? log : l));
-              }
-            }}
-            onCreateConsumableLog={async (log: Omit<ConsumableUsageLog, 'id' | 'createdAt' | 'updatedAt'>) => {
-              if (!isAuthenticated) {
-                toast({
-                  title: "Authentication Required",
-                  description: "Please login to create consumable logs",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              if (window.db) {
-                try {
-                  const logData = {
-                    ...log,
-                    consumable_id: log.consumableId,
-                    consumable_name: log.consumableName,
-                    site_id: log.siteId,
-                    date: log.date.toISOString(),
-                    quantity_used: log.quantityUsed,
-                    quantity_remaining: log.quantityRemaining,
-                    unit: log.unit,
-                    used_for: log.usedFor,
-                    used_by: log.usedBy,
-                    notes: log.notes
-                  };
-                  await window.db.createConsumableLog(logData);
-                  const logs = await window.db.getConsumableLogs();
-                  setConsumableLogs(logs);
-                  
-                  // Update asset siteQuantities to reflect consumption
-                  const asset = assets.find(a => a.id === log.consumableId);
-                  if (asset && asset.siteQuantities) {
-                    const updatedSiteQuantities = {
-                      ...asset.siteQuantities,
-                      [log.siteId]: log.quantityRemaining
-                    };
-                    const updatedAsset = {
-                      ...asset,
-                      siteQuantities: updatedSiteQuantities,
-                      updatedAt: new Date()
-                    };
-                    await window.db.updateAsset(asset.id, {
-                      site_quantities: JSON.stringify(updatedSiteQuantities),
-                      updated_at: new Date().toISOString()
-                    });
-                    setAssets(prev => prev.map(a => a.id === asset.id ? updatedAsset : a));
-                  }
-                } catch (error) {
-                  console.error('Failed to save consumable log:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to save consumable log to database.",
-                    variant: "destructive"
-                  });
-                }
-              } else {
-                setConsumableLogs(prev => [...prev, { ...log, id: Date.now().toString(), createdAt: new Date(), updatedAt: new Date() }]);
-              }
-            }}
-            onUpdateConsumableLog={async (log: ConsumableUsageLog) => {
-              if (!isAuthenticated) {
-                toast({
-                  title: "Authentication Required",
-                  description: "Please login to update consumable logs",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              if (window.db) {
-                try {
-                  const logData = {
-                    ...log,
-                    consumable_id: log.consumableId,
-                    consumable_name: log.consumableName,
-                    site_id: log.siteId,
-                    date: log.date.toISOString(),
-                    quantity_used: log.quantityUsed,
-                    quantity_remaining: log.quantityRemaining,
-                    unit: log.unit,
-                    used_for: log.usedFor,
-                    used_by: log.usedBy,
-                    notes: log.notes
-                  };
-                  await window.db.updateConsumableLog(log.id, logData);
-                  const logs = await window.db.getConsumableLogs();
-                  setConsumableLogs(logs);
-                } catch (error) {
-                  console.error('Failed to update consumable log:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to update consumable log in database.",
-                    variant: "destructive"
-                  });
-                }
-              } else {
-                setConsumableLogs(prev => prev.map(l => l.id === log.id ? log : l));
-              }
-            }}
-          />
-        );
-      case "settings":
-        return (
-          <CompanySettings 
-            settings={companySettings} 
-            onSave={setCompanySettings}
-            employees={employees}
-            onEmployeesChange={setEmployees}
-            vehicles={vehicles}
-            onVehiclesChange={setVehicles}
-            onResetAllData={handleResetAllData}
-          />
-        );
-      default:
-        return <Dashboard assets={assets} waybills={waybills} quickCheckouts={quickCheckouts} sites={sites} equipmentLogs={equipmentLogs} />;
-    }
-  };
 
   const isAssetInventoryTab = activeTab === "assets";
 

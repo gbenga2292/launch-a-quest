@@ -424,7 +424,7 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
   };
 
   // Use site inventory hook
-  const { getSiteInventory } = useSiteInventory(waybills, assets);
+  const { siteInventory, getSiteInventory } = useSiteInventory(waybills, assets);
 
   const handleSaveAsset = async (updatedAsset: Asset) => {
     try {
@@ -644,6 +644,160 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
     }
   };
 
+  const handleAddSite = async (site: Site) => {
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await window.db.createSite(site);
+      setSites(prev => [...prev, site]);
+      toast({
+        title: "Site Added",
+        description: `${site.name} has been added successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to add site', error);
+      toast({
+        title: "Error",
+        description: "Failed to add site",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUpdateSite = async (site: Site) => {
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await window.db.updateSite(site.id, {
+        ...site,
+        updated_at: new Date().toISOString()
+      });
+      setSites(prev => prev.map(s => s.id === site.id ? site : s));
+      toast({
+        title: "Site Updated",
+        description: `${site.name} has been updated successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to update site', error);
+      toast({
+        title: "Error",
+        description: "Failed to update site",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteSite = async (siteId: string) => {
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await window.db.deleteSite(siteId);
+      setSites(prev => prev.filter(s => s.id !== siteId));
+      toast({
+        title: "Site Deleted",
+        description: "Site has been deleted successfully"
+      });
+    } catch (error) {
+      logger.error('Failed to delete site', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete site",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCreateWaybill = async (waybillData: { siteId: string; items: WaybillItem[]; driverName: string; vehicle: string; purpose: string; expectedReturnDate?: Date; }) => {
+    if (!window.db) {
+      toast({
+        title: "Database Not Available",
+        description: "This app needs to run in Electron mode",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const newWaybill: Omit<Waybill, 'id' | 'createdAt' | 'updatedAt'> = {
+        type: 'waybill',
+        siteId: waybillData.siteId,
+        items: waybillData.items,
+        driverName: waybillData.driverName,
+        vehicle: waybillData.vehicle,
+        purpose: waybillData.purpose,
+        service: 'general',
+        issueDate: new Date(),
+        expectedReturnDate: waybillData.expectedReturnDate,
+        status: 'outstanding'
+      };
+
+      const result = await window.db.createWaybill(newWaybill);
+      const createdWaybill = {
+        ...result.waybill,
+        issueDate: new Date(result.waybill.issueDate),
+        expectedReturnDate: result.waybill.expectedReturnDate ? new Date(result.waybill.expectedReturnDate) : undefined,
+        sentToSiteDate: result.waybill.sentToSiteDate ? new Date(result.waybill.sentToSiteDate) : undefined,
+        createdAt: new Date(result.waybill.createdAt),
+        updatedAt: new Date(result.waybill.updatedAt)
+      };
+      
+      setWaybills(prev => [...prev, createdWaybill]);
+      
+      // Reload assets to reflect updated quantities
+      const loadedAssets = await window.db.getAssets();
+      const processedAssets = loadedAssets.map((item: any) => {
+        const asset = {
+          ...item,
+          createdAt: new Date(item.createdAt),
+          updatedAt: new Date(item.updatedAt),
+          siteQuantities: item.site_quantities ? JSON.parse(item.site_quantities) : {}
+        };
+        if (!asset.siteId) {
+          const reservedQuantity = asset.reservedQuantity || 0;
+          const damagedCount = asset.damagedCount || 0;
+          const missingCount = asset.missingCount || 0;
+          const totalQuantity = asset.quantity;
+          asset.availableQuantity = totalQuantity - reservedQuantity - damagedCount - missingCount;
+        }
+        return asset;
+      });
+      setAssets(processedAssets);
+      
+      toast({
+        title: "Waybill Created",
+        description: `Waybill ${createdWaybill.id} created successfully`
+      });
+    } catch (error) {
+      logger.error('Failed to create waybill', error);
+      toast({
+        title: "Error",
+        description: `Failed to create waybill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
@@ -675,8 +829,8 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
           <WaybillList
             waybills={waybills.filter(w => w.type === 'waybill')}
             sites={sites}
-            onEdit={(waybill) => setEditingWaybill(waybill)}
-            onViewDocument={(waybill) => setShowWaybillDocument(waybill)}
+            onViewWaybill={(waybill) => setShowWaybillDocument(waybill)}
+            onEditWaybill={(waybill) => setEditingWaybill(waybill)}
             onProcessReturn={(waybill) => setShowReturnForm(waybill)}
           />
         );
@@ -685,7 +839,8 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
           <ReturnsList
             waybills={waybills}
             sites={sites}
-            onEdit={(waybill) => setEditingReturnWaybill(waybill)}
+            onViewWaybill={(waybill) => setShowReturnWaybillDocument(waybill)}
+            onEditWaybill={(waybill) => setEditingReturnWaybill(waybill)}
           />
         );
       case "sites":
@@ -699,7 +854,17 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
             vehicles={vehicles}
             equipmentLogs={equipmentLogs}
             consumableLogs={consumableLogs}
-            onUpdateEquipmentLog={async (log: EquipmentLog) => {
+            siteInventory={siteInventory}
+            getSiteInventory={getSiteInventory}
+            companySettings={companySettings}
+            onAddSite={handleAddSite}
+            onUpdateSite={handleUpdateSite}
+            onDeleteSite={handleDeleteSite}
+            onUpdateAsset={handleSaveAsset}
+            onCreateWaybill={handleCreateWaybill}
+            onCreateReturnWaybill={handleCreateReturnWaybill}
+            onProcessReturn={handleProcessReturn}
+            onAddEquipmentLog={async (log: EquipmentLog) => {
               if (!isAuthenticated) {
                 toast({
                   title: "Authentication Required",
@@ -742,6 +907,10 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
                     createdAt: new Date(item.created_at),
                     updatedAt: new Date(item.updated_at)
                   })));
+                  toast({
+                    title: "Success",
+                    description: "Equipment log saved successfully",
+                  });
                 } catch (error) {
                   console.error('Failed to save equipment log:', error);
                   toast({
@@ -797,6 +966,10 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
                     createdAt: new Date(item.created_at),
                     updatedAt: new Date(item.updated_at)
                   })));
+                  toast({
+                    title: "Success",
+                    description: "Equipment log updated successfully",
+                  });
                 } catch (error) {
                   console.error('Failed to update equipment log:', error);
                   toast({
@@ -809,7 +982,7 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
                 setEquipmentLogs(prev => prev.map(l => l.id === log.id ? log : l));
               }
             }}
-            onCreateConsumableLog={async (log: Omit<ConsumableUsageLog, 'id' | 'createdAt' | 'updatedAt'>) => {
+            onAddConsumableLog={async (log: Omit<ConsumableUsageLog, 'id' | 'createdAt' | 'updatedAt'>) => {
               if (!isAuthenticated) {
                 toast({
                   title: "Authentication Required",
@@ -919,6 +1092,16 @@ const [consumableLogs, setConsumableLogs] = useState<ConsumableUsageLog[]>([]);
             onEmployeesChange={setEmployees}
             vehicles={vehicles}
             onVehiclesChange={setVehicles}
+            assets={assets}
+            onAssetsChange={setAssets}
+            waybills={waybills}
+            onWaybillsChange={setWaybills}
+            quickCheckouts={quickCheckouts}
+            onQuickCheckoutsChange={setQuickCheckouts}
+            sites={sites}
+            onSitesChange={setSites}
+            siteTransactions={siteTransactions}
+            onSiteTransactionsChange={setSiteTransactions}
             onResetAllData={handleResetAllData}
           />
         );

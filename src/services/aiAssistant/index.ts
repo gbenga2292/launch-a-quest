@@ -78,7 +78,16 @@ export class AIAssistantService {
     // Step 4: Save to conversation memory
     this.conversationMemory.addMessage(userInput, intent);
 
-    // Step 5: Check permissions
+    // Step 5: Handle unknown actions
+    if (intent.action === 'unknown') {
+      return {
+        success: false,
+        message: "I'm not sure what you'd like me to do. Could you please rephrase or provide more details? For example, you can ask me to:\n• Create a waybill\n• Add an asset\n• Process a return\n• Check inventory\n• View analytics",
+        intent
+      };
+    }
+
+    // Step 6: Check permissions
     const permissionCheck = this.permissionChecker.checkPermission(intent.action);
     if (!permissionCheck.allowed) {
       return {
@@ -88,7 +97,7 @@ export class AIAssistantService {
       };
     }
 
-    // Step 6: If still missing critical parameters, ask for clarification
+    // Step 7: If still missing critical parameters, ask for clarification
     if (intent.missingParameters.length > 0) {
       return {
         success: false,
@@ -98,7 +107,7 @@ export class AIAssistantService {
       };
     }
 
-    // Step 7: Execute action or suggest form
+    // Step 8: Execute action or suggest form
     return await this.actionExecutor.executeAction(intent);
   }
 

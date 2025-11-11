@@ -57,7 +57,7 @@ export const AIAssistantChat: React.FC = () => {
   };
 
   return (
-    <Card className="flex flex-col h-full border-0 shadow-soft">
+    <Card className="flex flex-col h-full max-h-full border-0 shadow-soft overflow-hidden">
       <CardHeader className="border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

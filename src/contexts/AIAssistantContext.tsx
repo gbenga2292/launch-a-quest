@@ -112,7 +112,15 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
         assets,
         sites,
         employees,
-        vehicles
+        vehicles,
+        (errorMsg: string) => {
+          // Show toast notification on LLM failure
+          toast({
+            title: "AI Assistant",
+            description: errorMsg,
+            variant: "default"
+          });
+        }
       );
       
       // Set execution context separately
@@ -127,6 +135,27 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
       aiService.updateContext(assets, sites, employees, vehicles);
     }
   }, [assets, sites, employees, vehicles, aiService]);
+
+  // Restore conversation history on mount
+  useEffect(() => {
+    if (aiService) {
+      const history = aiService.getConversationHistory();
+      if (history && history.length > 0) {
+        // Convert conversation history to chat messages
+        const chatMessages: ChatMessage[] = [];
+        for (const msg of history) {
+          chatMessages.push({
+            id: msg.id,
+            role: 'user',
+            content: msg.userInput,
+            timestamp: msg.timestamp,
+            intent: msg.intent
+          });
+        }
+        setMessages(chatMessages);
+      }
+    }
+  }, [aiService]);
 
   const sendMessage = async (content: string) => {
     if (!content.trim() || !aiService) return;

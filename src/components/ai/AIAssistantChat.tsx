@@ -87,8 +87,8 @@ export const AIAssistantChat: React.FC = () => {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col p-0">
-        <ScrollArea className="flex-1 p-4">
+      <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+        <ScrollArea className="flex-1 p-4 max-h-full">
           <div className="space-y-4">
             {messages.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">

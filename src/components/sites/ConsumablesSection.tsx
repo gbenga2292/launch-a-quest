@@ -18,6 +18,7 @@ import { ConsumableAnalytics } from "./ConsumableAnalytics";
 import { SiteConsumablesAnalytics } from "./SiteConsumablesAnalytics";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { logActivity } from "@/utils/activityLogger";
 
 interface ConsumablesSectionProps {
   site: Site;
@@ -46,7 +47,7 @@ export const ConsumablesSection = ({
   const [showAnalyticsDialog, setShowAnalyticsDialog] = useState(false);
   const [showSiteAnalytics, setShowSiteAnalytics] = useState(false);
   const [selectedConsumable, setSelectedConsumable] = useState<Asset | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [logForm, setLogForm] = useState<{
     quantityUsed: string;
     usedFor: string;
@@ -65,8 +66,8 @@ export const ConsumablesSection = ({
     
     // Check if consumable has usage logs at this site
     const hasLogs = consumableLogs.some(log => 
-      String(log.consumableId) === String(asset.id) && 
-      String(log.siteId) === String(site.id)
+      log.consumableId === asset.id && 
+      log.siteId === site.id
     );
     
     // Check if consumable currently has quantity at this site (including 0)
@@ -74,8 +75,8 @@ export const ConsumablesSection = ({
     
     // Check if consumable was ever sent to this site via waybill
     const hasWaybillHistory = waybills.some(wb => 
-      String(wb.siteId) === String(site.id) && 
-      wb.items.some(item => String(item.assetId) === String(asset.id))
+      wb.siteId === site.id && 
+      wb.items.some(item => item.assetId === asset.id)
     );
     
     // Show consumable if it has logs, current site quantity, OR waybill history
@@ -85,17 +86,69 @@ export const ConsumablesSection = ({
 
   const handleLogUsage = (consumable: Asset) => {
     setSelectedConsumable(consumable);
-    setLogForm({
-      quantityUsed: "",
-      usedFor: "",
-      usedBy: "",
-      notes: ""
-    });
+    setSelectedDate(new Date());
+    
+    // Check for existing log for today
+    const existingLog = consumableLogs.find(log =>
+      log.consumableId === consumable.id &&
+      log.siteId === site.id &&
+      format(log.date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+    );
+    
+    if (existingLog) {
+      // Populate form with existing data
+      setLogForm({
+        quantityUsed: existingLog.quantityUsed.toString(),
+        usedFor: existingLog.usedFor,
+        usedBy: existingLog.usedBy,
+        notes: existingLog.notes || ""
+      });
+    } else {
+      // Reset form for new entry
+      setLogForm({
+        quantityUsed: "",
+        usedFor: "",
+        usedBy: "",
+        notes: ""
+      });
+    }
+    
     setShowLogDialog(true);
+  };
+  
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date && selectedConsumable) {
+      setSelectedDate(date);
+      
+      // Check for existing log
+      const existingLog = consumableLogs.find(log =>
+        log.consumableId === selectedConsumable.id &&
+        log.siteId === site.id &&
+        format(log.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+      );
+      
+      if (existingLog) {
+        // Populate form with existing data
+        setLogForm({
+          quantityUsed: existingLog.quantityUsed.toString(),
+          usedFor: existingLog.usedFor,
+          usedBy: existingLog.usedBy,
+          notes: existingLog.notes || ""
+        });
+      } else {
+        // Reset form for new entry
+        setLogForm({
+          quantityUsed: "",
+          usedFor: "",
+          usedBy: "",
+          notes: ""
+        });
+      }
+    }
   };
 
   const handleSaveLog = () => {
-    if (!selectedConsumable) return;
+    if (!selectedConsumable || !selectedDate) return;
 
     const quantityUsed = parseFloat(logForm.quantityUsed);
     if (isNaN(quantityUsed) || quantityUsed <= 0) {
@@ -132,9 +185,16 @@ export const ConsumablesSection = ({
       });
       return;
     }
+    
+    // Check if we're updating an existing log
+    const existingLog = consumableLogs.find(log =>
+      log.consumableId === selectedConsumable.id &&
+      log.siteId === site.id &&
+      format(log.date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+    );
 
     const logData: ConsumableUsageLog = {
-      id: Date.now().toString(),
+      id: existingLog?.id || Date.now().toString(),
       consumableId: selectedConsumable.id,
       consumableName: selectedConsumable.name,
       siteId: site.id,
@@ -145,18 +205,42 @@ export const ConsumablesSection = ({
       usedFor: logForm.usedFor,
       usedBy: logForm.usedBy,
       notes: logForm.notes || undefined,
-      createdAt: new Date(),
+      createdAt: existingLog?.createdAt || new Date(),
       updatedAt: new Date()
     };
 
-    onAddConsumableLog(logData);
+    if (existingLog) {
+      onUpdateConsumableLog(logData);
+      logActivity({
+        action: 'update',
+        entity: 'consumable_log',
+        entityId: selectedConsumable.id,
+        details: `Updated usage log for ${selectedConsumable.name} at ${site.name} on ${format(selectedDate, 'MMM dd, yyyy')} - Used: ${quantityUsed} ${unit}`
+      });
+    } else {
+      onAddConsumableLog(logData);
+      logActivity({
+        action: 'create',
+        entity: 'consumable_log',
+        entityId: selectedConsumable.id,
+        details: `Created usage log for ${selectedConsumable.name} at ${site.name} on ${format(selectedDate, 'MMM dd, yyyy')} - Used: ${quantityUsed} ${unit}`
+      });
+    }
+    
     setShowLogDialog(false);
     setSelectedConsumable(null);
+    setSelectedDate(undefined);
     
     toast({
-      title: "Usage Logged",
-      description: `${quantityUsed} ${selectedConsumable.unitOfMeasurement} of ${selectedConsumable.name} logged.`,
+      title: existingLog ? "Usage Updated" : "Usage Logged",
+      description: `${quantityUsed} ${selectedConsumable.unitOfMeasurement} of ${selectedConsumable.name} ${existingLog ? 'updated' : 'logged'}.`,
     });
+  };
+  
+  const getLoggedDatesForConsumable = (consumableId: string) => {
+    return consumableLogs
+      .filter(log => log.consumableId === consumableId && log.siteId === site.id)
+      .map(log => log.date);
   };
 
   const getConsumableLogs = (consumableId: string) => {
@@ -186,7 +270,7 @@ export const ConsumablesSection = ({
 
   const getTotalUsed = (consumableId: string) => {
     return consumableLogs
-      .filter(log => log.consumableId === consumableId && log.siteId === site.id)
+      .filter(log => String(log.consumableId) === String(consumableId) && String(log.siteId) === String(site.id))
       .reduce((sum, log) => sum + log.quantityUsed, 0);
   };
 
@@ -297,24 +381,37 @@ export const ConsumablesSection = ({
 
       {/* Log Usage Dialog */}
       <Dialog open={showLogDialog} onOpenChange={setShowLogDialog}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Log Consumable Usage</DialogTitle>
+            <DialogTitle>Log Consumable Usage - {selectedConsumable?.name}</DialogTitle>
             <DialogDescription>
-              {selectedConsumable?.name} - {selectedConsumable?.siteQuantities?.[site.id]} {selectedConsumable?.unitOfMeasurement} available
+              {selectedDate && format(selectedDate, 'PPP')} - Current stock: {selectedConsumable?.siteQuantities?.[site.id]} {selectedConsumable?.unitOfMeasurement}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Calendar on the Left */}
             <div className="space-y-2">
-              <Label htmlFor="date">Select Date</Label>
+              <Label>Date</Label>
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
+                onSelect={(date) => date && handleDateSelect(date)}
+                modifiers={{
+                  logged: selectedConsumable ? getLoggedDatesForConsumable(selectedConsumable.id) : []
+                }}
+                modifiersStyles={{
+                  logged: {
+                    backgroundColor: 'hsl(var(--primary))',
+                    color: 'white',
+                    fontWeight: 'bold'
+                  }
+                }}
                 className="rounded-md border"
               />
+              <p className="text-xs text-muted-foreground mt-2">
+                Blue dates have existing logs
+              </p>
             </div>
 
             {/* Form on the Right */}
@@ -423,10 +520,10 @@ export const ConsumablesSection = ({
                             <p className="text-sm text-muted-foreground">Used By</p>
                             <p className="font-medium">{log.usedBy}</p>
                           </div>
-                          {log.notes && (
+                           {log.notes && (
                             <div className="col-span-2">
                               <p className="text-sm text-muted-foreground">Notes</p>
-                              <p className="text-sm">{log.notes}</p>
+                              <p className="text-sm bg-muted/50 p-2 rounded">{log.notes}</p>
                             </div>
                           )}
                           <div className="col-span-2">

@@ -17,6 +17,7 @@ const dbFunctions = [
     'getCompanySettings', 'createCompanySettings', 'updateCompanySettings',
     'getSiteTransactions', 'addSiteTransaction', 'updateSiteTransaction', 'deleteSiteTransaction',
     'getActivities', 'createActivity', 'clearActivities',
+    'getMetricsSnapshots', 'getTodayMetricsSnapshot', 'createMetricsSnapshot',
     'createWaybillWithTransaction', 'processReturnWithTransaction', 'sendToSiteWithTransaction', 'deleteWaybillWithTransaction', 'updateWaybillWithTransaction',
     'getSavedApiKeys', 'createSavedApiKey', 'updateSavedApiKey', 'setActiveApiKey', 'deleteSavedApiKey', 'getActiveApiKey',
     'migrateSavedKeysToKeytar', 'getApiKeyFromKeyRef',

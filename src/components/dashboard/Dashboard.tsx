@@ -12,7 +12,7 @@ import { getActivities } from "@/utils/activityLogger";
 import { SiteMachineAnalytics } from "@/components/sites/SiteMachineAnalytics";
 import { NotificationPanel } from "./NotificationPanel";
 import { TrendChart } from "./TrendChart";
-import { QuickActionsPanel } from "./QuickActionsPanel";
+
 import { format, subDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -261,26 +261,6 @@ export const Dashboard = ({ assets, waybills, quickCheckouts, sites, equipmentLo
     });
   }, [activities, activityDateRange]);
 
-  const handleBulkLog = () => {
-    toast({
-      title: "Bulk Log Equipment",
-      description: "This feature allows you to log multiple equipment at once. Coming soon!",
-    });
-  };
-
-  const handleQuickRestock = () => {
-    toast({
-      title: "Quick Restock",
-      description: "This feature allows you to quickly restock low inventory items. Coming soon!",
-    });
-  };
-
-  const handleExportDashboard = () => {
-    toast({
-      title: "Export Dashboard",
-      description: "Exporting dashboard data to PDF. Coming soon!",
-    });
-  };
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -328,12 +308,6 @@ export const Dashboard = ({ assets, waybills, quickCheckouts, sites, equipmentLo
         })}
       </div>
 
-      {/* Quick Actions Panel */}
-      <QuickActionsPanel
-        onBulkLog={handleBulkLog}
-        onQuickRestock={handleQuickRestock}
-        onExportDashboard={handleExportDashboard}
-      />
 
       {/* Notification Panel */}
       <NotificationPanel

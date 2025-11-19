@@ -221,6 +221,42 @@ export type Database = {
         }
         Relationships: []
       }
+      metrics_snapshots: {
+        Row: {
+          created_at: string
+          id: string
+          low_stock: number
+          out_of_stock: number
+          outstanding_checkouts: number
+          outstanding_waybills: number
+          snapshot_date: string
+          total_assets: number
+          total_quantity: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          low_stock?: number
+          out_of_stock?: number
+          outstanding_checkouts?: number
+          outstanding_waybills?: number
+          snapshot_date: string
+          total_assets?: number
+          total_quantity?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          low_stock?: number
+          out_of_stock?: number
+          outstanding_checkouts?: number
+          outstanding_waybills?: number
+          snapshot_date?: string
+          total_assets?: number
+          total_quantity?: number
+        }
+        Relationships: []
+      }
       quick_checkouts: {
         Row: {
           asset_id: string

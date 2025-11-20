@@ -12,6 +12,7 @@ import { getActivities } from "@/utils/activityLogger";
 import { SiteMachineAnalytics } from "@/components/sites/SiteMachineAnalytics";
 import { NotificationPanel } from "./NotificationPanel";
 import { TrendChart } from "./TrendChart";
+import { SyncStatusBanner } from "@/components/layout/SyncStatusBanner";
 import { useMetricsSnapshots, getMetricsHistory } from "@/hooks/useMetricsSnapshots";
 import { format, subDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -290,6 +291,9 @@ export const Dashboard = ({ assets, waybills, quickCheckouts, sites, equipmentLo
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* Sync Status Banner */}
+      <SyncStatusBanner />
+
       {/* Header */}
       <div>
         <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">

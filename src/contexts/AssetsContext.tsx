@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Asset } from '@/types/asset';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '@/lib/logger';
+import { dataService } from '@/services/dataService';
 
 interface AssetsContextType {
   assets: Asset[];
@@ -27,17 +28,15 @@ export const AssetsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [assets, setAssets] = useState<Asset[]>([]);
 
   const loadAssets = useCallback(async () => {
-    if (window.db) {
-      try {
-        const loadedAssets = await window.db.getAssets();
-        setAssets(loadedAssets.map((item: any) => ({
-          ...item,
-          createdAt: new Date(item.createdAt),
-          updatedAt: new Date(item.updatedAt)
-        })));
-      } catch (error) {
-        logger.error('Failed to load assets from database', error);
-      }
+    try {
+      const loadedAssets = await dataService.assets.getAssets();
+      setAssets(loadedAssets.map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.createdAt || item.created_at),
+        updatedAt: new Date(item.updatedAt || item.updated_at)
+      })));
+    } catch (error) {
+      logger.error('Failed to load assets from database', error);
     }
   }, []);
 
@@ -64,49 +63,27 @@ export const AssetsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Recalculate availableQuantity for all assets
   // Formula: quantity - reserved - damaged - missing (NOT subtracting siteQuantities)
-  useEffect(() => {
-    setAssets(prev => prev.map(asset => {
-      if (!asset.siteId) {
-        const reservedQuantity = asset.reservedQuantity || 0;
-        const damagedCount = asset.damagedCount || 0;
-        const missingCount = asset.missingCount || 0;
-        const totalQuantity = asset.quantity;
-        return {
-          ...asset,
-          availableQuantity: totalQuantity - reservedQuantity - damagedCount - missingCount
-        };
-      }
-      return asset;
-    }));
-  }, [assets.length]);
+
 
   const addAsset = async (assetData: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!window.db) {
-      toast({
-        title: "Database Not Available",
-        description: "This app needs to run in Electron mode to access the database.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const newAsset: Asset = {
+    // Don't set id - let Supabase auto-generate it
+    const newAssetData = {
       ...assetData,
-      id: Date.now().toString(),
       status: assetData.status || 'active',
       condition: assetData.condition || 'good',
-      createdAt: new Date(),
-      updatedAt: new Date()
     };
 
     try {
-      const savedAssets = await window.db.addAsset(newAsset);
-      const savedAsset = savedAssets[0];
-      setAssets(prev => [...prev, savedAsset]);
-      
+      const savedAsset = await dataService.assets.createAsset(newAssetData);
+      setAssets(prev => [...prev, {
+        ...savedAsset,
+        createdAt: new Date(savedAsset.createdAt),
+        updatedAt: new Date(savedAsset.updatedAt)
+      }]);
+
       toast({
         title: "Asset Added",
-        description: `${newAsset.name} has been added successfully`
+        description: `${savedAsset.name} has been added successfully`
       });
     } catch (error) {
       logger.error('Failed to add asset', error);
@@ -121,19 +98,14 @@ export const AssetsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const updateAsset = async (id: string, updatedAsset: Asset) => {
     const assetWithUpdatedDate = {
       ...updatedAsset,
-      availableQuantity: !updatedAsset.siteId ? 
-        (updatedAsset.quantity - (updatedAsset.reservedQuantity || 0)) : 
-        updatedAsset.availableQuantity,
+      availableQuantity: updatedAsset.availableQuantity,
       updatedAt: new Date()
     };
 
     try {
-      if (window.db) {
-        await window.db.updateAsset(id, assetWithUpdatedDate);
-      }
-      
+      await dataService.assets.updateAsset(Number(id), assetWithUpdatedDate);
       setAssets(prev => prev.map(asset => asset.id === id ? assetWithUpdatedDate : asset));
-      
+
       toast({
         title: "Asset Updated",
         description: `${assetWithUpdatedDate.name} has been updated successfully`
@@ -153,9 +125,9 @@ export const AssetsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!asset) return;
 
     try {
-      await window.db.deleteAsset(id);
+      await dataService.assets.deleteAsset(Number(id));
       setAssets(prev => prev.filter(asset => asset.id !== id));
-      
+
       toast({
         title: "Asset Deleted",
         description: `${asset.name} has been deleted successfully`

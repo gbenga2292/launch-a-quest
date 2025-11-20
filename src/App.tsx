@@ -3,13 +3,17 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createIDBPersister } from "./lib/query-persister";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "./contexts/AuthContext";
 import { AssetsProvider } from "./contexts/AssetsContext";
 import { WaybillsProvider } from "./contexts/WaybillsContext";
+import { AppDataProvider } from "./contexts/AppDataContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { NetworkStatus } from "./components/NetworkStatus";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -17,17 +21,24 @@ import NotFound from "./pages/NotFound";
 import { logger } from "./lib/logger";
 import { aiConfig } from "./config/aiConfig";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+});
 
 
 const App = () => {
   useEffect(() => {
     const showDatabaseInfo = async () => {
-      if (window.db?.getDatabaseInfo) {
+      if (window.electronAPI && window.electronAPI.db && window.electronAPI.db.getDatabaseInfo) {
         try {
-          const dbInfo = await window.db.getDatabaseInfo();
+          const dbInfo = await window.electronAPI.db.getDatabaseInfo();
           let storageTypeLabel = '';
-          
+
           switch (dbInfo.storageType) {
             case 'network':
               storageTypeLabel = '🌐 Network/NAS';
@@ -41,7 +52,7 @@ const App = () => {
             default:
               storageTypeLabel = '📊 Database';
           }
-          
+
           toast.success(`Database Connected`, {
             description: storageTypeLabel,
             duration: 6000,
@@ -53,7 +64,7 @@ const App = () => {
               color: 'inherit',
             },
           });
-          
+
           logger.info('Database initialized');
         } catch (error) {
           logger.error('Failed to get database info', error);
@@ -65,13 +76,14 @@ const App = () => {
     const validateLLMConfig = async () => {
       try {
         // Try reading persisted company settings (may include ai.remote)
-        if ((window as any).db?.getCompanySettings) {
-          const cs = await (window as any).db.getCompanySettings();
+        if ((window as any).electronAPI?.db?.getCompanySettings) {
+          const cs = await (window as any).electronAPI.db.getCompanySettings();
           const remote = cs?.ai?.remote;
-          if (remote && remote.enabled) {
+          const r = remote?.enabled;
+          if (remote && !!r && r !== 'false' && r !== '0') {
             // configure main process with remote config and test status
             try {
-              await (window as any).llm?.configure({ remote }).catch(() => {});
+              await (window as any).llm?.configure({ remote }).catch(() => { });
               const status = await (window as any).llm?.status();
               if (!status?.available && !(status && status.remoteConfigured)) {
                 toast.info('AI Assistant Not Available', { description: 'Remote AI is configured but not reachable. Check your API key and endpoint.', duration: 8000 });
@@ -89,14 +101,47 @@ const App = () => {
         logger.warn('Failed to validate AI configuration', err);
       }
     };
-    
+
     showDatabaseInfo();
     validateLLMConfig();
+
+    // Listen for scheduled backup requests from Main process
+    if ((window as any).electronAPI?.backupScheduler?.onAutoBackupTrigger) {
+      (window as any).electronAPI.backupScheduler.onAutoBackupTrigger(async () => {
+        logger.info('Received scheduled backup request');
+        try {
+          // Dynamically import to ensure we have fresh instance if needed, 
+          // though standard import at top is fine too. Using top-level import is cleaner.
+          // Using the global dataService imported at top would be better but I'll use lazy import to be safe
+          const { dataService } = await import("./services/dataService");
+
+          const backupData = await dataService.system.createBackup();
+
+          if ((window as any).electronAPI.backupScheduler?.save) {
+            await (window as any).electronAPI.backupScheduler.save(backupData);
+            toast.success("Scheduled Backup Complete", {
+              description: "Your daily backup has been saved."
+            });
+          }
+        } catch (err) {
+          logger.error("Scheduled backup failed", err);
+          toast.error("Scheduled Backup Failed");
+        }
+      });
+    }
+
   }, []);
-  
+
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister: createIDBPersister(),
+          maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+          buster: 'v1',
+        }}
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthProvider>
             <AssetsProvider>
@@ -104,24 +149,27 @@ const App = () => {
                 <TooltipProvider>
                   <Toaster />
                   <Sonner />
-                  <HashRouter>
-                    <Routes>
-                      <Route path="/login" element={<Login />} />
-                      <Route path="/" element={
-                        <ProtectedRoute>
-                          <Index />
-                        </ProtectedRoute>
-                      } />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </HashRouter>
+                  <NetworkStatus />
+                  <AppDataProvider>
+                    <HashRouter>
+                      <Routes>
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/" element={
+                          <ProtectedRoute>
+                            <Index />
+                          </ProtectedRoute>
+                        } />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </HashRouter>
+                  </AppDataProvider>
                 </TooltipProvider>
               </WaybillsProvider>
             </AssetsProvider>
           </AuthProvider>
         </ThemeProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 };

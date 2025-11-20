@@ -5,12 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { MobileActionMenu, ActionMenuItem } from "@/components/ui/mobile-action-menu";
 import { Asset } from "@/types/asset";
 import { Search, Filter, Edit, Trash2, MoreHorizontal, Package, Save, X, ArrowUpDown } from "lucide-react";
 
@@ -31,8 +26,8 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
 
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.location?.toLowerCase().includes(searchTerm.toLowerCase());
+      asset.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.location?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCategory = filterCategory === 'all' || asset.category === filterCategory;
     const matchesType = filterType === 'all' || asset.type === filterType;
@@ -77,8 +72,8 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
       'consumable': 'outline',
       'non-consumable': 'secondary'
     } as const;
-    
-    return <Badge variant={variants[type]}>{type}</Badge>;
+
+    return <Badge variant={variants[type]}>{type === 'non-consumable' ? 'Reuseables' : type}</Badge>;
   };
 
   const handleEditAsset = (asset: Asset) => {
@@ -112,10 +107,10 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Asset Inventory
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+          Inventory
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-sm sm:text-base text-muted-foreground mt-2">
           Manage and track all your assets in one place
         </p>
       </div>
@@ -133,7 +128,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                 className="pl-10 border-0 bg-muted/50 focus:bg-background"
               />
             </div>
-            
+
             <div className="flex gap-2">
               <Select value={filterCategory} onValueChange={(value: any) => setFilterCategory(value)}>
                 <SelectTrigger className="w-40 border-0 bg-muted/50">
@@ -158,7 +153,7 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                   <SelectItem value="equipment">Equipment</SelectItem>
                   <SelectItem value="tools">Tools</SelectItem>
                   <SelectItem value="consumable">Consumable</SelectItem>
-                  <SelectItem value="non-consumable">Non-consumable</SelectItem>
+                  <SelectItem value="non-consumable">Reuseables</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -227,11 +222,11 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                         </div>
                       )}
                     </TableCell>
-                    
+
                     <TableCell>
                       {getTypeBadge(asset.type)}
                     </TableCell>
-                    
+
                     <TableCell>
                       {editingAsset === asset.id ? (
                         <Input
@@ -244,11 +239,11 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                         <span className="font-medium">{asset.quantity} {asset.unitOfMeasurement}</span>
                       )}
                     </TableCell>
-                    
+
                     <TableCell>
                       {getStatusBadge(asset.quantity)}
                     </TableCell>
-                    
+
                     <TableCell>
                       {editingAsset === asset.id ? (
                         <Input
@@ -260,13 +255,13 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                         <span className="text-sm">{asset.location || 'Not specified'}</span>
                       )}
                     </TableCell>
-                    
+
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {asset.updatedAt instanceof Date ? asset.updatedAt.toLocaleDateString() : new Date(asset.updatedAt).toLocaleDateString()}
                       </span>
                     </TableCell>
-                    
+
                     <TableCell>
                       {editingAsset === asset.id ? (
                         <div className="flex gap-1">
@@ -278,39 +273,35 @@ export const AssetList = ({ assets, onEdit, onDelete }: AssetListProps) => {
                           </Button>
                         </div>
                       ) : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEditAsset(asset)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => onDelete(asset)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <MobileActionMenu
+                          title={`${asset.name} Actions`}
+                          items={[
+                            {
+                              label: "Edit",
+                              icon: <Edit className="h-4 w-4" />,
+                              onClick: () => handleEditAsset(asset),
+                            },
+                            {
+                              label: "Delete",
+                              icon: <Trash2 className="h-4 w-4" />,
+                              onClick: () => onDelete(asset),
+                              variant: "destructive",
+                            },
+                          ]}
+                        />
                       )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            
+
             {sortedAssets.length === 0 && (
               <div className="text-center py-12">
                 <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-muted-foreground">No assets found</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {searchTerm || filterCategory !== 'all' || filterType !== 'all' 
+                  {searchTerm || filterCategory !== 'all' || filterType !== 'all'
                     ? 'Try adjusting your search or filters'
                     : 'Add your first asset to get started'
                   }

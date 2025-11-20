@@ -25,11 +25,11 @@ export const SiteWaybills = ({
   onProcessReturn
 }: SiteWaybillsProps) => {
   const getSiteWaybills = (siteId: string) => {
-    return waybills.filter(waybill => waybill.siteId === siteId);
+    return waybills.filter(waybill => String(waybill.siteId) === String(siteId));
   };
 
   const getSiteAssets = (siteId: string) => {
-    return assets.filter(asset => asset.siteId === siteId);
+    return assets.filter(asset => String(asset.siteId) === String(siteId));
   };
 
   const getOutstandingWaybills = (siteId: string) => {
@@ -44,7 +44,7 @@ export const SiteWaybills = ({
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
           Site Waybills Management
         </h1>
         <p className="text-muted-foreground mt-2">

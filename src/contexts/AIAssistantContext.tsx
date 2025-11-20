@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { useAssets } from './AssetsContext';
 import { Asset, Site, Employee, Vehicle } from '@/types/asset';
 import { useToast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 
 export interface ChatMessage {
   id: string;
@@ -40,6 +41,7 @@ interface AIAssistantProviderProps {
   employees: Employee[];
   vehicles: Vehicle[];
   onAction?: (action: AIResponse['suggestedAction']) => void;
+  aiEnabled?: boolean;
 }
 
 export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
@@ -48,10 +50,11 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
   sites,
   employees,
   vehicles,
-  onAction
+  onAction,
+  aiEnabled = true
 }) => {
   const { currentUser } = useAuth();
-  const { addAsset } = useAssets();
+  const { addAsset, updateAsset } = useAssets();
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -69,14 +72,14 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
         (error) => {
           // Only show toast for non-API key related errors to reduce noise
           if (!error.includes('API key') && !error.includes('Authentication failed')) {
-            console.warn('AI Service Error:', error);
+            logger.warn('AI Service Error', { data: { error } });
             toast({
               title: "AI Assistant",
               description: error,
               variant: "default"
             });
           } else {
-            console.warn('AI Service Error (suppressed):', error);
+            logger.warn('AI Service Error (suppressed)', { data: { error } });
           }
         }
       );
@@ -98,6 +101,24 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
           }
           return waybillData;
         },
+        openAnalytics: async (data) => {
+          if (onAction) {
+            onAction({
+              type: 'execute_action',
+              data: { action: 'open_analytics', ...data }
+            });
+          }
+          return { success: true, message: 'Opening analytics dashboard' };
+        },
+        viewWaybill: async (id) => {
+          if (onAction) {
+            onAction({
+              type: 'execute_action',
+              data: { action: 'view_waybill', waybillId: id }
+            });
+          }
+          return { success: true, message: `Opening waybill ${id}` };
+        },
         processReturn: async (returnData) => {
           if (onAction) {
             onAction({
@@ -117,15 +138,13 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
           return siteData;
         },
         updateAsset: async (id, updates) => {
-          // Use the database API to update asset
-          if (window.db && window.db.updateAsset) {
-            await window.db.updateAsset(id, updates);
-          }
+          // Use the database API to update asset via Context/DataService
+          await updateAsset(id, updates as any);
           return { ...updates, id } as Asset;
         }
       });
 
-      console.log('AI Assistant Service initialized with execution context');
+      logger.info('AI Assistant Service initialized with execution context');
     }
   }, [currentUser, assets, sites, employees, vehicles, addAsset, onAction]);
 
@@ -137,6 +156,16 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
   }, [assets, sites, employees, vehicles]);
 
   const sendMessage = async (content: string) => {
+    // STRICT DISABLE CHECK
+    if (!aiEnabled) {
+      toast({
+        title: "AI Disabled",
+        description: "AI Assistant is currently disabled.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!content.trim() || !aiServiceRef.current) return;
 
     const userMessage: ChatMessage = {
@@ -196,7 +225,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-      
+
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -243,4 +272,3 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     </AIAssistantContext.Provider>
   );
 };
-

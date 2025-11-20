@@ -33,6 +33,12 @@ for (const functionName of dbFunctions) {
 // Expose the entire API on window.db
 contextBridge.exposeInMainWorld('db', dbAPI);
 
+// Expose sync APIs
+contextBridge.exposeInMainWorld('electronAPI', {
+  getSyncStatus: () => ipcRenderer.invoke('sync:getStatus'),
+  manualSync: () => ipcRenderer.invoke('sync:manualSync'),
+});
+
 // Expose Local LLM API (Bundled Runtime)
 const llmAPI = {
     generate: (payload) => ipcRenderer.invoke('llm:generate', payload),

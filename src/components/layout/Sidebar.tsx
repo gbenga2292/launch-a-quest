@@ -88,7 +88,7 @@ export const Sidebar = ({
       case 'quick-checkout':
         return 'read_quick_checkouts';
       case 'machine-maintenance':
-        return 'read_maintenance';
+        return 'access_maintenance';
       // New permission for machine maintenance
       case 'sites':
         return 'read_sites';
@@ -120,10 +120,8 @@ export const Sidebar = ({
     </div>
 
     <nav className="p-3 md:p-4 space-y-1 md:space-y-2 flex-1 overflow-y-auto">
-      {menuItems.map(item => {
-        const hasAccessToItem = hasAccess(item.id);
-        const isGreyedOut = !hasAccessToItem;
-        return <Button key={item.id} variant={activeTab === item.id ? "default" : "ghost"} className={cn("w-full justify-start gap-3 h-10 md:h-11 text-sm md:text-base", activeTab === item.id && "bg-gradient-primary shadow-medium", isGreyedOut && "opacity-50 cursor-not-allowed")} disabled={!hasAccessToItem} onClick={() => onTabChange(item.id)}>
+      {menuItems.filter(item => hasAccess(item.id)).map(item => {
+        return <Button key={item.id} variant={activeTab === item.id ? "default" : "ghost"} className={cn("w-full justify-start gap-3 h-10 md:h-11 text-sm md:text-base", activeTab === item.id && "bg-gradient-primary shadow-medium")} onClick={() => onTabChange(item.id)}>
           <item.icon className="h-4 w-4" />
           {item.label}
         </Button>;

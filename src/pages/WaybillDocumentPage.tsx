@@ -98,14 +98,25 @@ export const WaybillDocumentPage = ({ waybill, sites, companySettings, onBack }:
                     </div>
                     {/* Desktop action buttons */}
                     {!isMobile && (
-                        <div className="flex flex-col md:flex-row gap-2 shrink-0">
-                            <Button onClick={handlePrint} variant="outline" size="sm" className="gap-2 w-full md:w-auto" disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}>
+                        <div className="flex gap-2 shrink-0">
+                            <Button
+                                onClick={handlePrint}
+                                variant="outline"
+                                size="icon"
+                                className="xl:w-auto xl:px-4"
+                                disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}
+                            >
                                 <Printer className="h-4 w-4" />
-                                Print
+                                <span className="hidden xl:inline xl:ml-2">Print</span>
                             </Button>
-                            <Button onClick={handleDownloadPDF} size="sm" className="gap-2 bg-gradient-primary w-full md:w-auto" disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}>
+                            <Button
+                                onClick={handleDownloadPDF}
+                                size="icon"
+                                className="bg-gradient-primary xl:w-auto xl:px-4"
+                                disabled={waybill.status === 'outstanding' || !hasPermission('print_documents')}
+                            >
                                 <Download className="h-4 w-4" />
-                                Download PDF
+                                <span className="hidden xl:inline xl:ml-2">Download PDF</span>
                             </Button>
                         </div>
                     )}

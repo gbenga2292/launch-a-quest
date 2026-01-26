@@ -66,6 +66,7 @@ import { generateUnifiedReport } from "@/utils/unifiedReportGenerator";
 import { exportAssetsToExcel } from "@/utils/exportUtils";
 import { useAppData } from "@/contexts/AppDataContext";
 import { dataService } from "@/services/dataService";
+import { NetworkStatus } from "@/components/NetworkStatus";
 
 
 const Index = () => {
@@ -3991,6 +3992,9 @@ const Index = () => {
           onMenuClick={() => setMobileMenuOpen(true)}
         />
       )}
+
+      {/* Network Status Indicator */}
+      <NetworkStatus />
 
     </AIAssistantProvider>
   );

@@ -1896,7 +1896,7 @@ const Index = () => {
         }} />
       case "machine-maintenance":
         return <MachineMaintenancePage
-          machines={assets.filter(a => a.type === 'equipment').map(a => ({
+          machines={assets.filter(a => a.type === 'equipment' && a.requiresLogging).map(a => ({
             id: a.id,
             name: a.name,
             model: a.model,

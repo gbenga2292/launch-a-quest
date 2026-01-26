@@ -55,7 +55,12 @@ export const Dashboard = ({
   const totalQuantity = assets.reduce((sum, asset) => sum + asset.quantity, 0);
   const outOfStockCount = assets.filter(asset => asset.quantity === 0).length;
   const lowStockCount = assets.filter(asset => asset.quantity > 0 && asset.quantity < 10).length;
-  const outstandingWaybills = (waybills || []).filter(w => w.status === 'outstanding').length;
+
+  // Separate waybills from returns
+  const regularWaybills = (waybills || []).filter(w => w.type !== 'return');
+  const returnWaybills = (waybills || []).filter(w => w.type === 'return');
+
+  const outstandingWaybills = regularWaybills.filter(w => w.status === 'outstanding').length;
   const outstandingCheckouts = (quickCheckouts || []).filter(c => c.status === 'outstanding').length;
 
   // Total machines includes both equipment assets and vehicles (matching MachineMaintenancePage)
@@ -405,7 +410,7 @@ export const Dashboard = ({
           <div className="flex items-center justify-between mt-2 pt-2 border-t">
             <p className="text-[10px] md:text-xs text-muted-foreground">Overall Waybills</p>
             <Badge variant="outline" className="text-[10px] md:text-xs">
-              {waybills.length} Total
+              {regularWaybills.length} Total
             </Badge>
           </div>
         </CardContent>
@@ -425,7 +430,7 @@ export const Dashboard = ({
         </CardHeader>
         <CardContent className="p-3 md:p-6 pt-0">
           <div className="text-2xl md:text-3xl font-bold text-blue-500">
-            {waybills.filter(w => w.type === 'return' && w.status === 'outstanding').length}
+            {returnWaybills.filter(w => w.status === 'outstanding').length}
           </div>
           <div className="text-xs md:text-sm text-muted-foreground">Pending Returns</div>
           <p className="text-[10px] md:text-xs text-muted-foreground mt-2">Items awaiting processing</p>

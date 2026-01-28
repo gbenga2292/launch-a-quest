@@ -61,8 +61,8 @@ export const ResponsiveFormContainer = ({
             </div>
           </div>
 
-          {/* Content - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-4">
+          {/* Content - Scrollable with bottom padding for mobile nav */}
+          <div className="flex-1 overflow-y-auto p-4 pb-24">
             {children}
           </div>
         </div>

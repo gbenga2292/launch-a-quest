@@ -221,6 +221,103 @@ export type Database = {
         }
         Relationships: []
       }
+      material_request_items: {
+        Row: {
+          asset_id: string | null
+          created_at: string | null
+          id: string
+          item_name: string
+          notes: string | null
+          quantity: number
+          request_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          created_at?: string | null
+          id?: string
+          item_name: string
+          notes?: string | null
+          quantity?: number
+          request_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          created_at?: string | null
+          id?: string
+          item_name?: string
+          notes?: string | null
+          quantity?: number
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_request_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "material_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      material_requests: {
+        Row: {
+          created_at: string | null
+          fulfilled_reference_id: string | null
+          fulfilled_via: string | null
+          id: string
+          manager_notes: string | null
+          notes: string | null
+          priority: string | null
+          requester_id: string
+          requester_name: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          site_id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fulfilled_reference_id?: string | null
+          fulfilled_via?: string | null
+          id?: string
+          manager_notes?: string | null
+          notes?: string | null
+          priority?: string | null
+          requester_id: string
+          requester_name: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          site_id: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fulfilled_reference_id?: string | null
+          fulfilled_via?: string | null
+          id?: string
+          manager_notes?: string | null
+          notes?: string | null
+          priority?: string | null
+          requester_id?: string
+          requester_name?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          site_id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_requests_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metrics_snapshots: {
         Row: {
           created_at: string
@@ -416,6 +513,35 @@ export type Database = {
         }
         Relationships: []
       }
+      site_worker_assignments: {
+        Row: {
+          created_at: string | null
+          id: string
+          site_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          site_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          site_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_worker_assignments_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sites: {
         Row: {
           client_name: string | null
@@ -426,6 +552,7 @@ export type Database = {
           location: string | null
           name: string
           phone: string | null
+          service: string | null
           status: string | null
           updated_at: string | null
         }
@@ -438,6 +565,7 @@ export type Database = {
           location?: string | null
           name: string
           phone?: string | null
+          service?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -450,8 +578,33 @@ export type Database = {
           location?: string | null
           name?: string
           phone?: string | null
+          service?: string | null
           status?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -529,10 +682,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_sites: { Args: { _user_id: string }; Returns: string[] }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "admin"
+        | "data_entry_supervisor"
+        | "regulatory"
+        | "manager"
+        | "staff"
+        | "site_worker"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -659,6 +825,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: [
+        "admin",
+        "data_entry_supervisor",
+        "regulatory",
+        "manager",
+        "staff",
+        "site_worker",
+      ],
+    },
   },
 } as const
